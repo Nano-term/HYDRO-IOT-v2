@@ -3,7 +3,7 @@
  * CACHE v1.1.0 — fuerza limpieza de cache anterior
  */
 
-const CACHE_NAME = 'hidro-iot-v1.1.0';
+const CACHE_NAME = 'hidro-iot-v1.2.0';
 
 const PRECACHE = [
   '/',
