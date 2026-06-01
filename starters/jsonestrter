@@ -1,0 +1,21 @@
+{
+  "dispositivos": {
+    "tanque_001": {
+      "info": { "online": false, "firmware": "2.1.0" },
+      "lecturas": {},
+      "configuracion": {
+        "nivel_minimo": 25,
+        "nivel_maximo": 90,
+        "modo_auto_default": true
+      }
+    }
+  },
+  "alertas":  { "tanque_001": [] },
+  "comandos": {
+    "tanque_001": {
+      "bomba": false,
+      "modo_auto": true,
+      "timestamp": 0
+    }
+  }
+}

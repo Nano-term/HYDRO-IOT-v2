@@ -1,0 +1,14 @@
+{
+  "name": "hidro-ganadero-pwa",
+  "version": "1.0.0",
+  "description": "HidroGanadero IoT — PWA de monitoreo hídrico ganadero",
+  "private": true,
+  "scripts": {
+    "dev":   "npx serve . --listen 3000 --no-clipboard",
+    "start": "npx serve . --listen 3000",
+    "build": "echo 'Sin build — ES Modules nativos, listo para deploy'"
+  },
+  "devDependencies": {
+    "serve": "^14.2.3"
+  }
+}

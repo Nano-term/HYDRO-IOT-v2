@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <meta name="theme-color" content="#0f2b3d">
+  <meta name="description" content="HidroGanadero IoT — Monitoreo y control hídrico para ganado">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>HidroGanadero IoT</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="public/icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="src/css/main.css">
+  <link rel="stylesheet" href="src/css/animations.css">
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- SPLASH SCREEN                                  -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="splash" class="splash">
+  <div class="splash-logo">
+    <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
+      <circle cx="36" cy="36" r="34" fill="#1b6b87" opacity="0.15"/>
+      <path d="M36 10 C36 10 18 28 18 40 C18 50 26 58 36 58 C46 58 54 50 54 40 C54 28 36 10 36 10Z"
+            fill="#2c9cbf" opacity="0.9"/>
+      <path d="M36 22 C36 22 24 35 24 42 C24 48 29.4 53 36 53 C42.6 53 48 48 48 42 C48 35 36 22 36 22Z"
+            fill="white" opacity="0.3"/>
+    </svg>
+    <span>HidroGanadero</span>
+  </div>
+  <div class="splash-bar"><div class="splash-fill" id="splashFill"></div></div>
+  <p class="splash-sub">Iniciando sistema...</p>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- APP SHELL                                      -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="app" class="app hidden">
+
+  <!-- SIDEBAR NAV -->
+  <nav id="nav" class="nav">
+    <div class="nav-header">
+      <svg class="nav-logo-icon" width="32" height="32" viewBox="0 0 72 72" fill="none">
+        <path d="M36 8 C36 8 16 28 16 42 C16 53 25 62 36 62 C47 62 56 53 56 42 C56 28 36 8 36 8Z"
+              fill="currentColor" opacity="0.85"/>
+      </svg>
+      <div>
+        <div class="nav-logo-text">HidroGanadero</div>
+        <div class="nav-logo-sub" id="navDeviceName">tanque_001</div>
+      </div>
+    </div>
+
+    <div class="nav-status-bar">
+      <span class="status-dot" id="navDot"></span>
+      <span id="navEstado">Conectando...</span>
+    </div>
+
+    <ul class="nav-links">
+      <li><a href="#dashboard"  class="nav-link active" data-page="dashboard">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Dashboard
+      </a></li>
+      <li><a href="#control"    class="nav-link" data-page="control">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3m-3.3-6.7-2.1 2.1M7.4 16.6l-2.1 2.1m12.7 0-2.1-2.1M7.4 7.4 5.3 5.3"/></svg>
+        Control
+      </a></li>
+      <li><a href="#alertas"    class="nav-link" data-page="alertas">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86 1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Alertas <span class="badge hidden" id="navBadgeAlertas">0</span>
+      </a></li>
+      <li><a href="#historial"  class="nav-link" data-page="historial">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Historial
+      </a></li>
+      <li><a href="#notas"      class="nav-link" data-page="notas">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        Notas
+      </a></li>
+      <li><a href="#config"     class="nav-link" data-page="config">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        Configuración
+      </a></li>
+    </ul>
+
+    <div class="nav-footer">
+      <div class="nav-clock" id="navClock">--:--:--</div>
+      <div class="nav-uptime" id="navUptime">Uptime: --</div>
+      <div class="nav-rssi" id="navRssi">WiFi: -- dBm</div>
+    </div>
+  </nav>
+
+  <!-- HAMBURGER (mobile) -->
+  <button id="menuToggle" class="menu-toggle" aria-label="Menú">
+    <span></span><span></span><span></span>
+  </button>
+  <div id="navOverlay" class="nav-overlay hidden"></div>
+
+  <!-- MAIN CONTENT -->
+  <main id="main" class="main">
+
+    <!-- ─── PÁGINA: DASHBOARD ─────────────────────────── -->
+    <section id="page-dashboard" class="page active">
+      <div class="page-header">
+        <h1>Dashboard</h1>
+        <div class="header-right">
+          <span class="online-badge" id="onlineBadge">● En línea</span>
+          <span class="sim-badge hidden" id="simBadge">SIM</span>
+        </div>
+      </div>
+
+      <!-- Banner offline -->
+      <div class="offline-banner hidden" id="offlineBanner">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0119 12.55M5 12.55a10.94 10.94 0 015.17-2.39M10.71 5.05A16 16 0 0122.56 9M1.42 9a15.91 15.91 0 014.7-2.88M8.53 16.11a6 6 0 016.95 0M12 20h.01"/></svg>
+        Sin conexión — mostrando últimos datos conocidos
+      </div>
+
+      <!-- Semáforo de estado -->
+      <div class="estado-card" id="estadoCard">
+        <div class="semaforo">
+          <div class="semaforo-dot rojo"  id="semRojo"></div>
+          <div class="semaforo-dot ambar" id="semAmbar"></div>
+          <div class="semaforo-dot verde" id="semVerde"></div>
+        </div>
+        <div class="estado-info">
+          <div class="estado-label" id="estadoLabel">NORMAL</div>
+          <div class="estado-sub"   id="estadoSub">Sistema operando correctamente</div>
+        </div>
+        <div class="tanque-mini">
+          <div class="tanque-mini-fill" id="tanqueMiniRell"></div>
+          <div class="tanque-mini-level" id="tanqueMiniLabel">---%</div>
+        </div>
+      </div>
+
+      <!-- Métricas principales -->
+      <div class="metrics-grid">
+        <div class="metric-card" data-sensor="nivel">
+          <div class="metric-icon blue">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2c0 0-7 8-7 13a7 7 0 0014 0c0-5-7-13-7-13z"/></svg>
+          </div>
+          <div class="metric-body">
+            <div class="metric-val" id="mNivel">--</div>
+            <div class="metric-unit">%</div>
+          </div>
+          <div class="metric-label">Nivel Tanque</div>
+          <div class="metric-bar"><div class="metric-bar-fill" id="mNivelBar"></div></div>
+        </div>
+
+        <div class="metric-card" data-sensor="temperatura">
+          <div class="metric-icon orange">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 00-5 0v11.26a4.5 4.5 0 105 0z"/></svg>
+          </div>
+          <div class="metric-body">
+            <div class="metric-val" id="mTemp">--</div>
+            <div class="metric-unit">°C</div>
+          </div>
+          <div class="metric-label">Temperatura</div>
+        </div>
+
+        <div class="metric-card" data-sensor="humedad">
+          <div class="metric-icon teal">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14.899A7 7 0 1115.71 8h1.79a4.5 4.5 0 012.5 8.242"/><path d="M16 14v6m-4-4v6m-4-4v6"/></svg>
+          </div>
+          <div class="metric-body">
+            <div class="metric-val" id="mHum">--</div>
+            <div class="metric-unit">%</div>
+          </div>
+          <div class="metric-label">Humedad</div>
+        </div>
+
+        <div class="metric-card" data-sensor="bomba">
+          <div class="metric-icon" id="bombaIconWrap">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          </div>
+          <div class="metric-body">
+            <div class="metric-val" id="mBomba">--</div>
+          </div>
+          <div class="metric-label">Bomba</div>
+        </div>
+      </div>
+
+      <!-- Sensores secundarios (simulados) -->
+      <h2 class="section-title">Sensores de Calidad del Agua
+        <span class="sim-tag" id="simTagCalidad">SIM</span>
+      </h2>
+      <div class="metrics-grid secondary">
+        <div class="metric-card small">
+          <div class="metric-label">Turbidez</div>
+          <div class="metric-body"><div class="metric-val" id="mTurbidez">--</div><div class="metric-unit">NTU</div></div>
+        </div>
+        <div class="metric-card small">
+          <div class="metric-label">Flujo</div>
+          <div class="metric-body"><div class="metric-val" id="mFlujo">--</div><div class="metric-unit">L/min</div></div>
+        </div>
+        <div class="metric-card small">
+          <div class="metric-label">pH</div>
+          <div class="metric-body"><div class="metric-val" id="mPH">--</div></div>
+        </div>
+        <div class="metric-card small">
+          <div class="metric-label">TDS</div>
+          <div class="metric-body"><div class="metric-val" id="mTDS">--</div><div class="metric-unit">ppm</div></div>
+        </div>
+      </div>
+
+      <!-- Última actualización -->
+      <div class="last-update">
+        <span>Última actualización: <strong id="lastUpdateTime">--</strong></span>
+      </div>
+    </section>
+
+    <!-- ─── PÁGINA: CONTROL ───────────────────────────── -->
+    <section id="page-control" class="page">
+      <div class="page-header"><h1>Control Remoto</h1></div>
+
+      <!-- AND Gate status -->
+      <div class="and-gate-card" id="andGateCard">
+        <div class="and-gate-title">SN74LS08N — AND Gate de Seguridad</div>
+        <div class="and-gate-row">
+          <div class="gate-input" id="gateA">
+            <span class="gate-led"></span>WiFi
+          </div>
+          <div class="gate-symbol">AND</div>
+          <div class="gate-input" id="gateB">
+            <span class="gate-led"></span>Firebase
+          </div>
+          <div class="gate-arrow">→</div>
+          <div class="gate-output" id="gateY">
+            <span class="gate-led"></span>Control habilitado
+          </div>
+        </div>
+        <p class="gate-note" id="gateNote">Control remoto disponible</p>
+      </div>
+
+      <!-- Control de bomba -->
+      <div class="control-card">
+        <h2>Bomba de Agua</h2>
+        <div class="bomba-display">
+          <div class="bomba-visual" id="bombaVisual">
+            <svg width="80" height="80" viewBox="0 0 80 80">
+              <circle cx="40" cy="40" r="36" class="bomba-ring"/>
+              <circle cx="40" cy="40" r="28" class="bomba-inner" id="bombaInnerCircle"/>
+              <path d="M40 28 C40 28 28 38 28 44 C28 50 33.4 54 40 54 C46.6 54 52 50 52 44 C52 38 40 28 40 28Z"
+                    class="bomba-drop" id="bombaDropIcon"/>
+            </svg>
+          </div>
+          <div class="bomba-info">
+            <div class="bomba-status" id="bombaStatus">APAGADA</div>
+            <div class="bomba-mode"  id="bombaMode">Modo: AUTOMÁTICO</div>
+          </div>
+        </div>
+        <div class="bomba-btns">
+          <button class="btn btn-success" id="btnBombaOn"  onclick="UIControl.setBomba(true)">Encender Bomba</button>
+          <button class="btn btn-danger"  id="btnBombaOff" onclick="UIControl.setBomba(false)">Apagar Bomba</button>
+        </div>
+        <p class="control-warning" id="controlWarning"></p>
+      </div>
+
+      <!-- Modo de operación -->
+      <div class="control-card">
+        <h2>Modo de Operación</h2>
+        <div class="mode-btns">
+          <button class="btn btn-mode" id="btnModoAuto" onclick="UIControl.setModo(true)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+            Automático
+          </button>
+          <button class="btn btn-mode-outline" id="btnModoManual" onclick="UIControl.setModo(false)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+            Manual
+          </button>
+        </div>
+        <div class="mode-description" id="modeDescription">
+          En modo automático, la bomba se activa cuando el nivel baja del 25% y se apaga al superar el 90%.
+        </div>
+      </div>
+
+      <!-- Estado del dispositivo -->
+      <div class="control-card">
+        <h2>Estado del Dispositivo</h2>
+        <div class="device-info-grid" id="deviceInfoGrid">
+          <div class="di-row"><span>Firmware</span><strong id="diFw">--</strong></div>
+          <div class="di-row"><span>IP</span><strong id="diIp">--</strong></div>
+          <div class="di-row"><span>Uptime</span><strong id="diUptime">--</strong></div>
+          <div class="di-row"><span>RSSI</span><strong id="diRssi">--</strong></div>
+          <div class="di-row"><span>Online</span><strong id="diOnline">--</strong></div>
+          <div class="di-row"><span>Alertas activas</span><strong id="diAlertas">--</strong></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── PÁGINA: ALERTAS ───────────────────────────── -->
+    <section id="page-alertas" class="page">
+      <div class="page-header">
+        <h1>Alertas</h1>
+        <button class="btn btn-sm btn-outline" onclick="UIAlertas.resolverTodas()">Resolver todas</button>
+      </div>
+      <div id="alertasList" class="alertas-list">
+        <div class="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <p>Sin alertas activas</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── PÁGINA: HISTORIAL ─────────────────────────── -->
+    <section id="page-historial" class="page">
+      <div class="page-header">
+        <h1>Historial</h1>
+        <div class="header-right">
+          <select id="historialRange" class="select-sm" onchange="UICharts.cambiarRango(this.value)">
+            <option value="30">Últimas 30 lecturas</option>
+            <option value="60">Últimas 60 lecturas</option>
+            <option value="100">Últimas 100</option>
+          </select>
+        </div>
+      </div>
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3>Nivel del Tanque (%)</h3>
+          <canvas id="chartNivel" height="120"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Temperatura (°C)</h3>
+          <canvas id="chartTemp" height="120"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Turbidez (NTU)</h3>
+          <canvas id="chartTurbidez" height="120"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>pH</h3>
+          <canvas id="chartPH" height="120"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── PÁGINA: NOTAS ─────────────────────────────── -->
+    <section id="page-notas" class="page">
+      <div class="page-header"><h1>Notas del Operador</h1></div>
+      <div class="nota-form-card">
+        <textarea id="notaTexto" class="nota-input" placeholder="Escribe una nota de mantenimiento, observación o incidencia..." rows="3"></textarea>
+        <div class="nota-form-footer">
+          <select id="notaTipo" class="select-sm">
+            <option value="operacion">Operación</option>
+            <option value="mantenimiento">Mantenimiento</option>
+            <option value="incidencia">Incidencia</option>
+            <option value="observacion">Observación</option>
+          </select>
+          <button class="btn btn-primary" onclick="UINotas.guardar()">Guardar nota</button>
+        </div>
+      </div>
+      <div id="notasList" class="notas-list"></div>
+    </section>
+
+    <!-- ─── PÁGINA: CONFIGURACIÓN ─────────────────────── -->
+    <section id="page-config" class="page">
+      <div class="page-header"><h1>Configuración</h1></div>
+
+      <div class="config-card">
+        <h2>Umbrales de Nivel</h2>
+        <div class="config-row">
+          <label>Nivel mínimo (bomba ON)</label>
+          <div class="config-input-row">
+            <input type="range" id="cfgNivelMin" min="5" max="40" value="25" oninput="UIConfig.preview('cfgNivelMinVal', this.value, '%')">
+            <span id="cfgNivelMinVal">25%</span>
+          </div>
+        </div>
+        <div class="config-row">
+          <label>Nivel máximo (bomba OFF)</label>
+          <div class="config-input-row">
+            <input type="range" id="cfgNivelMax" min="60" max="98" value="90" oninput="UIConfig.preview('cfgNivelMaxVal', this.value, '%')">
+            <span id="cfgNivelMaxVal">90%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-card">
+        <h2>Umbrales de Temperatura</h2>
+        <div class="config-row">
+          <label>Temperatura alta (advertencia)</label>
+          <div class="config-input-row">
+            <input type="range" id="cfgTempAlta" min="25" max="45" value="35" oninput="UIConfig.preview('cfgTempAltaVal', this.value, '°C')">
+            <span id="cfgTempAltaVal">35°C</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-card">
+        <h2>Firebase</h2>
+        <div class="config-row">
+          <label>Device ID</label>
+          <input type="text" id="cfgDeviceId" class="config-text-input" value="tanque_001" placeholder="tanque_001">
+        </div>
+        <p class="config-note">Cambiar el Device ID para monitorear otro tanque. Debe coincidir con DEVICE_ID en mod_config.h</p>
+      </div>
+
+      <div class="config-card">
+        <h2>Modo de datos</h2>
+        <div class="config-row toggle-row">
+          <label>Usar datos simulados (sin ESP32)</label>
+          <label class="toggle">
+            <input type="checkbox" id="cfgSimMode" onchange="UIConfig.toggleSimMode(this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <p class="config-note">Cuando el ESP32 no tiene señal, los simuladores generan datos realistas para demostración.</p>
+      </div>
+
+      <!-- ─── TARJETA BLE — CAMBIAR WIFI DEL ESP32 ─────────── -->
+      <div class="config-card ble-card">
+        <h2>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:6px">
+            <polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/>
+          </svg>
+          Cambiar WiFi del ESP32 (Bluetooth)
+        </h2>
+
+        <p class="config-note" style="margin-bottom:14px">
+          Si mueves el tanque a otra ubicación con diferente red, conecta por Bluetooth
+          y envía las nuevas credenciales sin necesidad de reflashear el ESP32.
+        </p>
+
+        <!-- Estado de conexión BLE -->
+        <div class="ble-status" id="bleStatus">
+          <span class="ble-dot" id="bleDot"></span>
+          <span id="bleStatusText">No conectado</span>
+        </div>
+
+        <!-- Botón conectar -->
+        <button class="btn btn-outline ble-btn" id="bleBtnConectar"
+                onclick="UIBLE.conectar()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/>
+          </svg>
+          Buscar ESP32 por Bluetooth
+        </button>
+
+        <!-- Formulario WiFi (oculto hasta conectar) -->
+        <div id="bleWifiForm" class="ble-form hidden">
+          <div class="config-row">
+            <label>Nombre de la red (SSID)</label>
+            <input type="text" id="bleSSID" class="config-text-input"
+                   placeholder="NombreDeTuRed" maxlength="32">
+          </div>
+          <div class="config-row">
+            <label>Contraseña</label>
+            <div style="position:relative">
+              <input type="password" id="blePass" class="config-text-input"
+                     placeholder="Contraseña del WiFi" id="blePass">
+              <button onclick="UIBLE.togglePass()" class="ble-eye" id="bleEye">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="ble-form-btns">
+            <button class="btn btn-primary" onclick="UIBLE.enviarWifi()">
+              Enviar nueva red al ESP32
+            </button>
+            <button class="btn btn-outline" onclick="UIBLE.desconectar()">
+              Desconectar BLE
+            </button>
+          </div>
+
+          <div id="bleProgress" class="ble-progress hidden">
+            <div class="ble-progress-bar">
+              <div class="ble-progress-fill" id="bleProgressFill"></div>
+            </div>
+            <p id="bleProgressMsg">Enviando credenciales...</p>
+          </div>
+        </div>
+
+        <p class="config-note" style="margin-top:12px">
+          ⚠ Web Bluetooth requiere <strong>Chrome o Edge</strong> en Android o escritorio.
+          No funciona en Safari ni Firefox.
+        </p>
+      </div>
+
+      <div class="config-footer">
+        <button class="btn btn-primary" onclick="UIConfig.guardar()">Guardar configuración</button>
+        <button class="btn btn-outline" onclick="UIConfig.resetear()">Restaurar valores</button>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- TOAST NOTIFICATIONS -->
+<div id="toastContainer" class="toast-container"></div>
+
+<!-- Scripts — ES Modules -->
+<script type="module" src="src/js/app.js"></script>
+</body>
+</html>
