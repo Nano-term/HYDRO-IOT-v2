@@ -1,4 +1,4 @@
-# HidroGanadero IoT — PWA
+# HidroGanadero IoT — PWA.
 ## Versión 1.1.0 | Progressive Web App
 
 ---
