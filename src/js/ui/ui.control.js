@@ -43,7 +43,7 @@ export const UIControl = {
     if (desc) {
       desc.textContent = isAuto
         ? 'La bomba se activa cuando el nivel baja del 25% y se apaga al superar el 90%.'
-        : 'La bomba responde a los comandos manuales. AND gate debe estar activo para comandos remotos.';
+        : 'La bomba responde a los comandos manuales.';
     }
 
     // Botones bomba
@@ -77,16 +77,16 @@ export const UIControl = {
       const led = el.querySelector('.gate-led');
       if (led) led.className = `gate-led ${on ? 'on' : 'off'}`;
     };
-    setGate('gateA', d.andGateA);
-    setGate('gateB', d.andGateB);
-    setGate('gateY', d.andGateY);
+    setGate('gateA', d.wifiConectado);
+    setGate('gateB', d.firebaseConectado);
 
     const note = $id('gateNote');
     if (note) {
-      note.textContent = d.andGateY
-        ? '✅ Control remoto habilitado (WiFi AND Firebase activos)'
-        : '⛔ Control remoto bloqueado — conectar WiFi y Firebase';
-      note.style.color = d.andGateY ? 'var(--green)' : 'var(--amber)';
+      const ok = d.wifiConectado && d.firebaseConectado;
+      note.textContent = ok
+        ? '✅ Control remoto habilitado'
+        : '○ Sin conexión — usando modo local o BLE';
+      note.style.color = ok ? 'var(--green)' : 'var(--text3)';
     }
   },
 
