@@ -106,6 +106,8 @@
         <div class="header-right">
           <span class="online-badge" id="onlineBadge">● En línea</span>
           <span class="sim-badge hidden" id="simBadge">SIM</span>
+          <span class="ble-online-badge hidden" id="bleBadge">BLE</span>
+          <span class="cache-badge hidden" id="cacheBadge">CACHÉ</span>
         </div>
       </div>
 
@@ -146,6 +148,17 @@
           <div class="metric-bar"><div class="metric-bar-fill" id="mNivelBar"></div></div>
         </div>
 
+        <div class="metric-card" data-sensor="litros">
+          <div class="metric-icon blue">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </div>
+          <div class="metric-body">
+            <div class="metric-val" id="mLitros">--</div>
+            <div class="metric-unit">L</div>
+          </div>
+          <div class="metric-label">Litros actuales</div>
+        </div>
+
         <div class="metric-card" data-sensor="temperatura">
           <div class="metric-icon orange">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 00-5 0v11.26a4.5 4.5 0 105 0z"/></svg>
@@ -180,31 +193,57 @@
       </div>
 
       <!-- Sensores secundarios (simulados) -->
-      <h2 class="section-title">Sensores de Calidad del Agua
-        <span class="sim-tag" id="simTagCalidad">SIM</span>
-      </h2>
+      <h2 class="section-title">Sensores de Calidad del Agua</h2>
       <div class="metrics-grid secondary">
         <div class="metric-card small">
-          <div class="metric-label">Turbidez</div>
+          <div class="metric-label-row">
+            <span class="metric-label">Turbidez</span>
+            <span class="sim-dot-sensor hidden" id="simDot_turbidez" title="Simulado">◈</span>
+          </div>
           <div class="metric-body"><div class="metric-val" id="mTurbidez">--</div><div class="metric-unit">NTU</div></div>
+          <div class="metric-bar"><div class="metric-bar-fill" id="mTurbidezBar" style="width:0%"></div></div>
         </div>
         <div class="metric-card small">
-          <div class="metric-label">Flujo</div>
+          <div class="metric-label-row">
+            <span class="metric-label">Flujo</span>
+            <span class="sim-dot-sensor hidden" id="simDot_flujo" title="Simulado">◈</span>
+          </div>
           <div class="metric-body"><div class="metric-val" id="mFlujo">--</div><div class="metric-unit">L/min</div></div>
+          <div class="metric-bar"><div class="metric-bar-fill" id="mFlujoBar" style="width:0%"></div></div>
         </div>
         <div class="metric-card small">
-          <div class="metric-label">pH</div>
+          <div class="metric-label-row">
+            <span class="metric-label">pH</span>
+            <span class="sim-dot-sensor hidden" id="simDot_ph" title="Simulado">◈</span>
+          </div>
           <div class="metric-body"><div class="metric-val" id="mPH">--</div></div>
+          <div class="metric-bar"><div class="metric-bar-fill" id="mPHBar" style="width:0%"></div></div>
         </div>
         <div class="metric-card small">
-          <div class="metric-label">TDS</div>
+          <div class="metric-label-row">
+            <span class="metric-label">TDS</span>
+            <span class="sim-dot-sensor hidden" id="simDot_tds" title="Simulado">◈</span>
+          </div>
           <div class="metric-body"><div class="metric-val" id="mTDS">--</div><div class="metric-unit">ppm</div></div>
+          <div class="metric-bar"><div class="metric-bar-fill" id="mTDSBar" style="width:0%"></div></div>
+        </div>
+      </div>
+
+      <!-- Tarjeta resumen del día -->
+      <div class="resumen-dia-card hidden" id="resumenDiaCard">
+        <div class="resumen-dia-title">Hoy</div>
+        <div class="resumen-dia-grid">
+          <div class="resumen-item"><span class="resumen-val" id="rCiclos">--</span><span class="resumen-lbl">ciclos bomba</span></div>
+          <div class="resumen-item"><span class="resumen-val" id="rMinutos">--</span><span class="resumen-lbl">encendida</span></div>
+          <div class="resumen-item"><span class="resumen-val" id="rLitros">--</span><span class="resumen-lbl">bombeados</span></div>
+          <div class="resumen-item"><span class="resumen-val" id="rFuga" style="font-size:0.8rem">Sin anomalías</span><span class="resumen-lbl">anomalías</span></div>
         </div>
       </div>
 
       <!-- Última actualización -->
       <div class="last-update">
         <span>Última actualización: <strong id="lastUpdateTime">--</strong></span>
+        <span class="cache-age-badge hidden" id="cacheAgeBadge"></span>
       </div>
     </section>
 
@@ -299,6 +338,17 @@
           <p>Sin alertas activas</p>
         </div>
       </div>
+      <!-- Timeline de eventos recientes -->
+      <div style="margin-top:24px">
+        <h2 style="font-size:1rem;color:var(--text2);margin-bottom:10px">Eventos recientes (sesión)</h2>
+        <div id="timelineList" class="timeline-list"></div>
+      </div>
+
+      <!-- Historial de alertas resueltas -->
+      <div style="margin-top:24px">
+        <h2 style="font-size:1rem;color:var(--text2);margin-bottom:10px">Alertas resueltas</h2>
+        <div id="alertasHistorial" class="alertas-list"></div>
+      </div>
     </section>
 
     <!-- ─── PÁGINA: HISTORIAL ─────────────────────────── -->
@@ -306,6 +356,10 @@
       <div class="page-header">
         <h1>Historial</h1>
         <div class="header-right">
+          <button class="btn btn-sm btn-outline" onclick="UICharts.exportarCSV()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            CSV
+          </button>
           <select id="historialRange" class="select-sm" onchange="UICharts.cambiarRango(this.value)">
             <option value="30">Últimas 30 lecturas</option>
             <option value="60">Últimas 60 lecturas</option>
@@ -384,6 +438,18 @@
         </div>
       </div>
 
+      <!-- Notificaciones push -->
+      <div class="config-card">
+        <h2>Notificaciones</h2>
+        <div class="toggle-row">
+          <label style="font-size:0.88rem;color:var(--text2)">Alertas críticas (nivel 3-4) al instante</label>
+          <button class="btn btn-sm btn-outline" id="btnActivarNotif" onclick="activarNotificaciones()">
+            Activar notificaciones
+          </button>
+        </div>
+        <p class="config-note" id="notifStatus">Estado: no configurado. Solo funciona si instalas la app.</p>
+      </div>
+
       <div class="config-card">
         <h2>Firebase</h2>
         <div class="config-row">
@@ -393,8 +459,32 @@
         <p class="config-note">Cambiar el Device ID para monitorear otro tanque. Debe coincidir con DEVICE_ID en mod_config.h</p>
       </div>
 
+      <!-- MODO DE FUENTE DE DATOS -->
       <div class="config-card">
-        <h2>Modo de datos</h2>
+        <h2>Fuente de datos</h2>
+        <div class="modo-fuente-btns">
+          <button class="btn btn-modo-fuente" id="btnModoFirebase"
+                  onclick="UIConfig.desactivarBLE()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/><path d="M3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18"/>
+            </svg>
+            Firebase / WiFi
+          </button>
+          <button class="btn btn-modo-fuente" id="btnModoBLE"
+                  onclick="UIConfig.activarBLE()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/>
+            </svg>
+            Bluetooth (BLE)
+          </button>
+        </div>
+        <p class="config-note" id="modoActualInfo">Verificando modo actual...</p>
+        <p class="config-note">En modo BLE los datos llegan directamente del ESP32 sin necesidad de WiFi. No hay historial en este modo.</p>
+      </div>
+
+      <!-- SIMULACIÓN COMPLETA -->
+      <div class="config-card">
+        <h2>Modo de datos (simulación)</h2>
         <div class="config-row toggle-row">
           <label>Usar datos simulados (sin ESP32)</label>
           <label class="toggle">
@@ -477,13 +567,96 @@
         </p>
       </div>
 
+      <!-- PANEL OCULTO: SIM POR MÓDULO (3 toques en título Configuración) -->
+      <div id="panelSimModulos" class="config-card hidden" style="border-color:rgba(124,58,237,0.4)">
+        <h2 style="color:var(--accent)">
+          ⚙ Simulación por módulo
+          <span style="font-size:0.7rem;color:var(--text3);font-weight:400"> — solo afecta módulos individuales</span>
+        </h2>
+        <p class="config-note" style="margin-bottom:14px">Activa simulación para sensores específicos. Útil cuando no tienes todos los sensores físicos conectados.</p>
+
+        <div class="sim-modulos-grid">
+          <div class="sim-mod-row">
+            <label>Nivel (HC-SR04)</label>
+            <label class="toggle"><input type="checkbox" id="simMod_nivel"
+              onchange="UIConfig.toggleSimModulo('nivel', this.checked)">
+              <span class="toggle-slider"></span></label>
+          </div>
+          <div class="sim-mod-row">
+            <label>Temperatura (DHT22)</label>
+            <label class="toggle"><input type="checkbox" id="simMod_temperatura"
+              onchange="UIConfig.toggleSimModulo('temperatura', this.checked)">
+              <span class="toggle-slider"></span></label>
+          </div>
+          <div class="sim-mod-row">
+            <label>Humedad (DHT22)</label>
+            <label class="toggle"><input type="checkbox" id="simMod_humedad"
+              onchange="UIConfig.toggleSimModulo('humedad', this.checked)">
+              <span class="toggle-slider"></span></label>
+          </div>
+          <div class="sim-mod-row">
+            <label>Turbidez</label>
+            <label class="toggle"><input type="checkbox" id="simMod_turbidez"
+              onchange="UIConfig.toggleSimModulo('turbidez', this.checked)">
+              <span class="toggle-slider"></span></label>
+          </div>
+          <div class="sim-mod-row">
+            <label>Flujo</label>
+            <label class="toggle"><input type="checkbox" id="simMod_flujo"
+              onchange="UIConfig.toggleSimModulo('flujo', this.checked)">
+              <span class="toggle-slider"></span></label>
+          </div>
+          <div class="sim-mod-row">
+            <label>pH</label>
+            <label class="toggle"><input type="checkbox" id="simMod_ph"
+              onchange="UIConfig.toggleSimModulo('ph', this.checked)">
+              <span class="toggle-slider"></span></label>
+          </div>
+          <div class="sim-mod-row">
+            <label>TDS</label>
+            <label class="toggle"><input type="checkbox" id="simMod_tds"
+              onchange="UIConfig.toggleSimModulo('tds', this.checked)">
+              <span class="toggle-slider"></span></label>
+          </div>
+        </div>
+
+        <button class="btn btn-outline" style="margin-top:14px"
+                onclick="UIConfig.resetSimModulos()">
+          Desactivar todos
+        </button>
+      </div>
+
       <div class="config-footer">
         <button class="btn btn-primary" onclick="UIConfig.guardar()">Guardar configuración</button>
         <button class="btn btn-outline" onclick="UIConfig.resetear()">Restaurar valores</button>
       </div>
+
+      <!-- Botón acceso panel avanzado -->
+      <div class="admin-btn-wrap">
+        <button class="btn-admin-access" id="btnAdminAccess"
+                onclick="UIConfig.mostrarAdminLogin()"
+                title="Panel avanzado">⚙</button>
+      </div>
+
     </section>
 
   </main>
+
+<!-- Modal contraseña admin — fuera de sections para evitar overflow -->
+<div id="adminModal" class="admin-modal hidden">
+  <div class="admin-modal-box">
+    <p class="admin-modal-title">Panel avanzado</p>
+    <input type="password" id="adminPassInput" class="admin-pass-input"
+           placeholder="Contraseña"
+           onkeydown="if(event.key==='Enter') UIConfig.verificarAdmin()">
+    <div class="admin-modal-btns">
+      <button class="btn btn-primary" onclick="UIConfig.verificarAdmin()">Entrar</button>
+      <button class="btn btn-outline" onclick="UIConfig.cerrarAdminLogin()">Cancelar</button>
+    </div>
+    <p class="admin-modal-error hidden" id="adminError">Contraseña incorrecta</p>
+  </div>
+</div>
+
 </div>
 
 <!-- TOAST NOTIFICATIONS -->

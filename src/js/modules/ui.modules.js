@@ -74,58 +74,6 @@ window.UIAlertas = UIAlertas;
 
 
 // ══════════════════════════════════════════════════════════════
-// UITimeline — Historial de eventos recientes
-// ══════════════════════════════════════════════════════════════
-export const UITimeline = {
-  _eventos: [],
-
-  init() {
-    // Escuchar cambios de bomba, estado y alertas para registrar eventos
-    State.on('bomba:change', (encendida) => {
-      this._addEvento(encendida ? 'bomba_on' : 'bomba_off',
-        encendida ? 'Bomba encendida' : 'Bomba apagada');
-    });
-    State.on('estado:change', (estado) => {
-      if (estado !== 'NORMAL' && estado !== 'OFFLINE') {
-        this._addEvento('alerta', 'Estado: ' + estado);
-      }
-    });
-    State.on('alertas:update', (alertas) => {
-      const nuevas = alertas.filter(a => !a.resuelta && a.ts && (Date.now() - a.ts) < 5000);
-      nuevas.forEach(a => this._addEvento('alerta', a.tipo.replace(/_/g,' ') + ': ' + a.mensaje));
-      this._render();
-    });
-    State.on('page:change', (p) => { if (p === 'alertas') this._render(); });
-  },
-
-  _addEvento(tipo, texto) {
-    this._eventos.unshift({ tipo, texto, ts: Date.now() });
-    if (this._eventos.length > 30) this._eventos.pop();
-    this._render();
-  },
-
-  _render() {
-    const el = document.getElementById('timelineList');
-    if (!el) return;
-    if (this._eventos.length === 0) {
-      el.innerHTML = '<p style="font-size:0.82rem;color:var(--text3);padding:12px 0">Sin eventos registrados en esta sesión</p>';
-      return;
-    }
-    const iconos = { bomba_on: '💧', bomba_off: '⏹', alerta: '⚠', info: 'ℹ' };
-    el.innerHTML = this._eventos.slice(0,15).map(e => {
-      const hora = new Date(e.ts).toLocaleTimeString('es-MX');
-      return `<div class="timeline-item">
-        <span class="timeline-icon">${iconos[e.tipo] || 'ℹ'}</span>
-        <span class="timeline-texto">${e.texto}</span>
-        <span class="timeline-hora">${hora}</span>
-      </div>`;
-    }).join('');
-  },
-};
-window.UITimeline = UITimeline;
-
-
-// ══════════════════════════════════════════════════════════════
 // UICharts — Gráficas con Chart.js (carga lazy)
 // ══════════════════════════════════════════════════════════════
 const CHART_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
@@ -220,27 +168,6 @@ export const UICharts = {
   },
 
   cambiarRango() { this._actualizar(State.historial); },
-
-  exportarCSV() {
-    if (!State.historial || State.historial.length === 0) {
-      Toast.warning('Sin datos de historial para exportar');
-      return;
-    }
-    const headers = 'Timestamp,Nivel(%),Temperatura(C),Turbidez(NTU),pH';
-    const rows = State.historial.map(p => {
-      const fecha = new Date(p.ts).toISOString();
-      return `${fecha},${(p.nivel??'').toFixed?.(1)??''},${(p.temperatura??'').toFixed?.(1)??''},${(p.turbidez??'').toFixed?.(1)??''},${(p.ph??'').toFixed?.(2)??''}`;
-    });
-    const csv  = [headers, ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `hidro_${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    Toast.success('CSV descargado');
-  },
 };
 window.UICharts = UICharts;
 
@@ -311,39 +238,7 @@ export const UINotas = {
 window.UINotas = UINotas;
 
 
-
-
-// ══════════════════════════════════════════════════════════════
-// UIAlertasHistorial — Alertas resueltas
-// ══════════════════════════════════════════════════════════════
-export const UIAlertasHistorial = {
-  init() {
-    State.on('alertas:update', () => this._render());
-    State.on('page:change', (p) => { if (p === 'alertas') this._render(); });
-  },
-
-  _render() {
-    const el = document.getElementById('alertasHistorial');
-    if (!el) return;
-    const resueltas = State.alertas.filter(a => a.resuelta).slice(0, 20);
-    if (resueltas.length === 0) {
-      el.innerHTML = '<p style="font-size:0.82rem;color:var(--text3)">Sin alertas resueltas aún</p>';
-      return;
-    }
-    const colorMap = { 1: '', 2: 'nivel-2', 3: 'nivel-3', 4: 'nivel-4' };
-    el.innerHTML = resueltas.map(a => `
-      <div class="alerta-item ${colorMap[a.nivel]||''}" style="opacity:0.6">
-        <div class="alerta-body">
-          <h4 style="text-decoration:line-through">${a.tipo.replace(/_/g,' ')}</h4>
-          <p>${a.mensaje||''}</p>
-          <div class="alerta-meta">
-            Resuelta &bull; ${a.ts ? new Date(a.ts).toLocaleString('es-MX') : '--'}
-          </div>
-        </div>
-      </div>`).join('');
-  },
-};
-window.UIAlertasHistorial = UIAlertasHistorial;
+export { UIConfig } from './ui.config.js';
 
 
 // ══════════════════════════════════════════════════════════════

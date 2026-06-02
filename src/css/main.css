@@ -608,3 +608,141 @@ body {
   transition: width 0.4s ease;
 }
 #bleProgressMsg { font-size: 0.82rem; color: var(--text2); }
+
+/* ─── v2 BADGES & MODOS ─────────────────────────────────────── */
+.ble-online-badge { font-size:.8rem; color:var(--accent); background:rgba(44,156,191,.15); padding:3px 10px; border-radius:99px; }
+.cache-badge { font-size:.75rem; color:var(--text3); background:var(--surface); padding:2px 8px; border-radius:99px; }
+.cache-age-badge { font-size:.78rem; color:var(--amber); margin-left:10px; background:rgba(245,158,11,.1); padding:2px 8px; border-radius:6px; }
+.modo-fuente-btns { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+.btn-modo-fuente { flex:1; justify-content:center; display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:var(--radius); font-size:.88rem; font-weight:500; cursor:pointer; border:1px solid var(--border); background:var(--bg3); color:var(--text2); transition:all var(--transition); }
+.btn-modo-fuente.active { background:var(--accent); color:white; border-color:var(--accent); }
+.btn-modo-fuente:hover:not(.active) { background:var(--surface); color:var(--text); }
+.sim-modulos-grid { display:flex; flex-direction:column; gap:10px; }
+.sim-mod-row { display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:var(--bg3); border-radius:8px; font-size:.88rem; color:var(--text2); }
+
+/* ─── PUNTO SECRETO CONFIG ─────────────────────────────────── */
+.secret-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--surface2);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s, box-shadow 0.2s;
+  margin-left: auto;
+}
+.secret-dot:hover {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+}
+
+/* ─── BOTÓN ADMIN ──────────────────────────────────────────── */
+.admin-btn-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0 8px;
+}
+.btn-admin-access {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text3);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all var(--transition);
+  display: flex; align-items: center; justify-content: center;
+}
+.btn-admin-access:hover {
+  background: var(--surface);
+  color: var(--text2);
+  border-color: var(--accent2);
+}
+
+/* ─── MODAL ADMIN ──────────────────────────────────────────── */
+.admin-modal {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9000;
+}
+.admin-modal-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px 24px;
+  width: 280px;
+  box-shadow: var(--shadow);
+}
+.admin-modal-title {
+  font-size: 0.95rem; font-weight: 600;
+  color: var(--text); margin-bottom: 16px; text-align: center;
+}
+.admin-pass-input {
+  width: 100%; padding: 10px 14px;
+  background: var(--bg3); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: 0.95rem; margin-bottom: 14px;
+  font-family: inherit;
+}
+.admin-pass-input:focus { outline: none; border-color: var(--accent); }
+.admin-modal-btns { display: flex; gap: 8px; }
+.admin-modal-btns .btn { flex: 1; justify-content: center; }
+.admin-modal-error {
+  font-size: 0.82rem; color: var(--red);
+  text-align: center; margin-top: 10px;
+}
+
+/* Shake animation para contraseña incorrecta */
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  25%      { transform: translateX(-6px); }
+  75%      { transform: translateX(6px); }
+}
+.shake { animation: shake 0.4s ease; }
+
+/* ─── SENSOR SIM DOT ────────────────────────────────────────── */
+.metric-label-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 4px;
+}
+.sim-dot-sensor {
+  font-size: 0.72rem; color: var(--amber);
+  background: rgba(245,158,11,0.15);
+  padding: 1px 5px; border-radius: 4px;
+  font-weight: 600;
+}
+
+/* ─── RESUMEN DÍA ────────────────────────────────────────────── */
+.resumen-dia-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px; margin-top: 16px;
+}
+.resumen-dia-title {
+  font-size: 0.78rem; font-weight: 600; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  margin-bottom: 10px;
+}
+.resumen-dia-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+}
+.resumen-item { display: flex; flex-direction: column; align-items: center; }
+.resumen-val  { font-size: 1.3rem; font-weight: 700; color: var(--text); }
+.resumen-lbl  { font-size: 0.72rem; color: var(--text3); margin-top: 2px; }
+
+@media (max-width: 480px) {
+  .resumen-dia-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ─── TIMELINE ───────────────────────────────────────────────── */
+.timeline-list { display: flex; flex-direction: column; gap: 6px; }
+.timeline-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px;
+  background: var(--bg3); border-radius: 8px;
+  font-size: 0.82rem;
+}
+.timeline-icon { font-size: 0.9rem; flex-shrink: 0; }
+.timeline-texto { flex: 1; color: var(--text2); }
+.timeline-hora  { color: var(--text3); font-size: 0.75rem; flex-shrink: 0; }

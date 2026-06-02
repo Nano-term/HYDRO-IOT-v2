@@ -93,6 +93,15 @@ export function listenLecturas(deviceId) {
       andGateA: d.andGateA ?? false,
       andGateB: d.andGateB ?? false,
       andGateY: d.andGateY ?? false,
+      // Estadísticas de bomba
+      bomba_ciclos_hoy:    d.bomba_ciclos_hoy    ?? undefined,
+      bomba_minutos_hoy:   d.bomba_minutos_hoy   ?? undefined,
+      bomba_duracion_ult:  d.bomba_duracion_ult  ?? undefined,
+      litros_actuales:     parseFloat(d.litros_actuales    ?? 0),
+      consumo_litros_hoy:  parseFloat(d.consumo_litros_hoy ?? 0),
+      consumo_litros_prom: parseFloat(d.consumo_litros_prom?? 0),
+      fuga_detectada:      d.fuga_detectada ?? false,
+      llenado_tiempo_prom: d.llenado_tiempo_prom ?? 0,
     });
 
     State.setApp({ deviceOnline: true, firebaseReady: true, simModeActive: false });
