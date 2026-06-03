@@ -47,11 +47,9 @@ export function listenLecturas(deviceId) {
 
     // ── Sin datos: ESP32 no ha publicado aún ─────────────
     if (!snap.exists()) {
-      console.warn('[Firebase] Ruta vacía → simulación activa');
-      State.setApp({ deviceOnline: false, firebaseReady: true, simModeActive: true });
-      import('../simulators/sim.main.js')
-        .then(m => { if (!m.simIsRunning()) m.simStart(); })
-        .catch(() => {});
+      console.warn('[Firebase] Ruta vacía — sin datos del ESP32 aún');
+      State.setApp({ deviceOnline: false, firebaseReady: true });
+      // No iniciar simulación — mostrar caché si existe
       return;
     }
 
@@ -90,9 +88,6 @@ export function listenLecturas(deviceId) {
       wifiConectado:     d.wifiConectado     ?? false,
       firebaseConectado: true,
       online:            true,
-      andGateA: d.andGateA ?? false,
-      andGateB: d.andGateB ?? false,
-      andGateY: d.andGateY ?? false,
       // Estadísticas de bomba
       bomba_ciclos_hoy:    d.bomba_ciclos_hoy    ?? undefined,
       bomba_minutos_hoy:   d.bomba_minutos_hoy   ?? undefined,
@@ -104,7 +99,13 @@ export function listenLecturas(deviceId) {
       llenado_tiempo_prom: d.llenado_tiempo_prom ?? 0,
     });
 
-    State.setApp({ deviceOnline: true, firebaseReady: true, simModeActive: false });
+    State.setApp({
+      deviceOnline:     true,
+      firebaseReady:    true,
+      simModeActive:    false,
+      dataSource:       'firebase',
+      bleMode:          false,     // salir de modo BLE si llegaron datos Firebase
+    });
 
     State.addHistorial({
       nivel:       parseFloat(d.nivel       ?? 0),
@@ -221,6 +222,48 @@ export async function fbGetConfiguracion(deviceId) {
   } catch (e) {
     return null;
   }
+}
+
+// ── Escuchar config en tiempo real (sin recarga) ──────────────
+export function listenConfiguracion(deviceId, onChange) {
+  if (!_db) return;
+  const r = ref(_db, CONFIG.RTDB_PATHS.configuracion(deviceId));
+  if (_listeners.config) _listeners.config();
+  _listeners.config = onValue(r, snap => {
+    if (snap.exists()) onChange(snap.val());
+  });
+}
+
+// ── Reconexión automática con backoff ─────────────────────────
+let _reconectTimer   = null;
+let _reconectDelay   = 5000;
+let _reconectCb      = null;
+
+export function firebase_onDesconexion(cb) {
+  _reconectCb = cb;
+}
+
+export function firebase_scheduleReconnect() {
+  if (_reconectTimer) clearTimeout(_reconectTimer);
+  _reconectTimer = setTimeout(() => {
+    console.log('[Firebase] Reintentando reconexión...');
+    if (_reconectCb) _reconectCb();
+    _reconectDelay = Math.min(_reconectDelay * 2, 60000);
+  }, _reconectDelay);
+}
+
+export function firebase_resetReconnect() {
+  _reconectDelay = 5000;
+  if (_reconectTimer) { clearTimeout(_reconectTimer); _reconectTimer = null; }
+}
+
+export async function fbSetConfiguracion(deviceId, data) {
+  if (!_db) return false;
+  try {
+    const r = ref(_db, CONFIG.RTDB_PATHS.configuracion(deviceId));
+    await set(r, { ...data });
+    return true;
+  } catch(e) { return false; }
 }
 
 export function cancelarListeners() {

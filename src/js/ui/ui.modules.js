@@ -221,6 +221,72 @@ export const UICharts = {
 
   cambiarRango() { this._actualizar(State.historial); },
 
+  renderSalud() {
+    const el = document.getElementById('saludGrid');
+    if (!el) return;
+    const d = State.device;
+    const app = State.app;
+    const edad = State.getLastDataAge();
+    const edadStr = edad === null ? '--'
+      : edad < 60  ? `${edad}s`
+      : edad < 3600 ? `${Math.floor(edad/60)}m`
+      : `${Math.floor(edad/3600)}h`;
+
+    const src = app.dataSource || 'none';
+    const srcLabel = {firebase:'Firebase',ble:'BLE',sim:'Simulación',cache:'Caché',none:'--'}[src]||src;
+    const rssi = d.rssi || 0;
+    const rssiLabel = rssi === 0 ? '--' : rssi > -60 ? '🟢 Excelente' : rssi > -75 ? '🟡 Buena' : '🔴 Débil';
+    const uptime = d.uptime || 0;
+    const uptimeStr = uptime < 60 ? `${uptime}s`
+      : uptime < 3600 ? `${Math.floor(uptime/60)}m`
+      : `${Math.floor(uptime/3600)}h ${Math.floor((uptime%3600)/60)}m`;
+
+    el.innerHTML = `
+      <div class="salud-item"><span class="salud-lbl">Última lectura</span>
+        <span class="salud-val ${edad && edad > 120 ? 'warn' : ''}">${edadStr} atrás</span></div>
+      <div class="salud-item"><span class="salud-lbl">Fuente de datos</span>
+        <span class="salud-val">${srcLabel}</span></div>
+      <div class="salud-item"><span class="salud-lbl">WiFi RSSI</span>
+        <span class="salud-val">${rssiLabel} (${rssi} dBm)</span></div>
+      <div class="salud-item"><span class="salud-lbl">Uptime ESP32</span>
+        <span class="salud-val">${uptimeStr}</span></div>
+      <div class="salud-item"><span class="salud-lbl">IP dispositivo</span>
+        <span class="salud-val">${d.ip || '--'}</span></div>
+      <div class="salud-item"><span class="salud-lbl">Firmware</span>
+        <span class="salud-val">${d.firmwareVersion || '--'}</span></div>
+      <div class="salud-item"><span class="salud-lbl">Ciclos bomba hoy</span>
+        <span class="salud-val">${d.bomba_ciclos_hoy ?? '--'}</span></div>
+      <div class="salud-item"><span class="salud-lbl">Litros bombeados hoy</span>
+        <span class="salud-val">${d.consumo_litros_hoy > 0 ? d.consumo_litros_hoy.toFixed(0)+' L' : '--'}</span></div>
+    `;
+  },
+
+  renderLitros() {
+    const canvas = document.getElementById('chartLitros');
+    if (!canvas || typeof Chart === 'undefined') return;
+    if (!State.historial || State.historial.length === 0) return;
+
+    // Agrupar litros por hora
+    const byHour = {};
+    State.historial.forEach(p => {
+      const h = new Date(p.ts).getHours();
+      byHour[h] = (byHour[h] || 0) + (parseFloat(p.consumo_litros_hoy) || 0);
+    });
+    const labels = Object.keys(byHour).map(h => `${h}:00`);
+    const data   = Object.values(byHour);
+
+    if (canvas._chartInst) canvas._chartInst.destroy();
+    canvas._chartInst = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{ label: 'Litros por hora', data,
+          backgroundColor: 'rgba(44,156,191,0.6)', borderColor: '#2c9cbf', borderWidth: 1 }]
+      },
+      options: { responsive: true, scales: { y: { beginAtZero: true } } }
+    });
+  },
+
   exportarCSV() {
     if (!State.historial || State.historial.length === 0) {
       Toast.warning('Sin datos de historial para exportar');
@@ -349,6 +415,38 @@ window.UIAlertasHistorial = UIAlertasHistorial;
 // ══════════════════════════════════════════════════════════════
 // UINav — Reloj, uptime, RSSI en sidebar
 // ══════════════════════════════════════════════════════════════
+// ── Salud del sistema ─────────────────────────────────────────
+export const UISalud = {
+  init() {
+    State.on('device:update', () => {
+      if (document.getElementById('page-salud')?.classList.contains('active')) {
+        this.render();
+      }
+      this._actualizarEdad();
+    });
+    State.on('page:change', p => { if (p === 'salud') this.render(); });
+    setInterval(() => this._actualizarEdad(), 15000);
+  },
+  render() {
+    if (typeof UICharts !== 'undefined' && UICharts.renderSalud) {
+      UICharts.renderSalud();
+    }
+    // fallback inline
+    const el = document.getElementById('saludGrid');
+    if (el && el.innerHTML === '') UICharts?.renderSalud?.();
+  },
+  _actualizarEdad() {
+    const badge = document.getElementById('lastDataAge');
+    if (!badge) return;
+    const edad = State.getLastDataAge();
+    if (edad === null || edad < 90) { badge.classList.add('hidden'); return; }
+    const min = Math.floor(edad / 60);
+    badge.textContent = `Datos de hace ${min} min`;
+    badge.classList.remove('hidden');
+  },
+};
+window.UISalud = UISalud;
+
 export const UINav = {
   init() {
     State.on('device:update', (d) => this._renderInfo(d));

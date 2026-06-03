@@ -155,6 +155,7 @@ export const BLEManager = {
 
   /** Desconectar manualmente */
   desconectar() {
+    _reconectManual = true;  // no auto-reconectar en desconexión manual
     if (_device && _device.gatt.connected) {
       _device.gatt.disconnect();
     }
@@ -174,9 +175,39 @@ export const BLEManager = {
   },
 
   _onDesconectado() {
+    // Solo mostrar toast si era conexión activa (no si el usuario desconectó)
+    if (_intentandoConectar) return; // ya hay reintento en marcha
     Toast.warning(`${_device?.name || 'ESP32'} desconectado`);
-    this._limpiar();
     if (_onStatus) _onStatus('DESCONECTADO');
+
+    // Intentar reconexión automática si el dispositivo sigue disponible
+    if (_device && !_reconectManual) {
+      _intentandoConectar = true;
+      console.log('[BLE] Intentando reconexión automática...');
+      setTimeout(async () => {
+        try {
+          _server  = await _device.gatt.connect();
+          _service = await _server.getPrimaryService(SERVICE_UUID);
+          _chars.cmdBomba = await _service.getCharacteristic(CHAR_CMD_BOMBA);
+          _chars.cmdModo  = await _service.getCharacteristic(CHAR_CMD_MODO);
+          try {
+            _chars.sensors = await _service.getCharacteristic(CHAR_SENSORS);
+            await _chars.sensors.startNotifications();
+            _chars.sensors.addEventListener('characteristicvaluechanged',
+              (e) => this._onSensorData(e.target.value));
+          } catch(e) {}
+          _intentandoConectar = false;
+          Toast.success('BLE reconectado');
+          if (_onStatus) _onStatus('CONECTADO');
+        } catch(e) {
+          _intentandoConectar = false;
+          this._limpiar();
+          console.warn('[BLE] Reconexión fallida:', e.message);
+        }
+      }, 2000);
+    } else {
+      this._limpiar();
+    }
   },
 
   _limpiar() {
@@ -184,6 +215,7 @@ export const BLEManager = {
     _server   = null;
     _service  = null;
     _chars    = {};
+    _reconectManual = false;
   },
 
   getNombre() {

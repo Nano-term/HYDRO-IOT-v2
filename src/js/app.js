@@ -6,14 +6,16 @@
 import CONFIG        from './config/app.config.js';
 import State         from './state.js';
 import { Router }    from './router.js';
-import { firebaseInit, listenLecturas, listenAlertas, listenNotas }
+import { firebaseInit, listenLecturas, listenAlertas, listenNotas,
+         listenConfiguracion, firebase_onDesconexion,
+         firebase_scheduleReconnect, firebase_resetReconnect }
                      from './firebase/firebase.js';
 import DeviceManager from './device/device.manager.js';
 import { simStart }  from './simulators/sim.main.js';
 import { EstadosModule } from './modules/estados.module.js';
 import { UIDashboard }   from './ui/ui.dashboard.js';
 import { UIControl }     from './ui/ui.control.js';
-import { UIAlertas, UICharts, UINotas, UINav, UITimeline, UIAlertasHistorial } from './ui/ui.modules.js';
+import { UIAlertas, UICharts, UINotas, UINav, UITimeline, UIAlertasHistorial, UISalud } from './ui/ui.modules.js';
 import { UIConfig }  from './ui/ui.config.js';
 import UIBLE         from './ui/ui.ble.js';
 
@@ -112,6 +114,7 @@ async function init() {
   UINav.init();
   UITimeline.init();
   UIAlertasHistorial.init();
+  UISalud.init();
   UIBLE.init();
   EstadosModule.init();
 
@@ -149,10 +152,45 @@ async function init() {
     listenLecturas(deviceId);
     listenAlertas(deviceId);
     listenNotas(deviceId);
+
+    // Config en tiempo real — UI se actualiza sin recargar
+    listenConfiguracion(deviceId, (cfg) => {
+      State.setConfig(cfg);
+      import('./ui/ui.config.js').then(m => m.UIConfig?.renderRemote?.(cfg)).catch(()=>{});
+    });
+
+    // Reconexión automática con backoff 5s→10s→20s→...60s
+    firebase_onDesconexion(() => {
+      firebase_resetReconnect();
+      listenLecturas(deviceId);
+      listenAlertas(deviceId);
+      listenConfiguracion(deviceId, (cfg) => State.setConfig(cfg));
+    });
+    firebase_resetReconnect();
   } else {
-    console.warn('[App] Sin Firebase → simulación');
-    State.setApp({ simModeActive: true, deviceOnline: false, dataSource: 'sim' });
-    simStart();
+    console.warn('[App] Sin Firebase → modo offline');
+    // Intentar cargar últimos datos conocidos del caché
+    const cacheOk = State.cargarDesdeCache();
+    if (cacheOk) {
+      console.log('[App] Datos cargados desde caché local');
+      // BLE sigue disponible para control en tiempo real
+    } else {
+      // Sin caché ni Firebase → mostrar estado vacío, NO simular
+      // El usuario puede activar simulación manualmente desde el panel admin
+      State.setApp({ deviceOnline: false, dataSource: 'none' });
+      State.setDevice({ estado: 'OFFLINE', online: false });
+    }
+    // Intentar reconectar cada 30s si recupera internet
+    setInterval(() => {
+      if (!navigator.onLine) return;
+      let fbRetry = false;
+      try { fbRetry = firebaseInit(); } catch(e) {}
+      if (fbRetry) {
+        listenLecturas(deviceId);
+        listenAlertas(deviceId);
+        listenConfiguracion(deviceId, (cfg) => State.setConfig(cfg));
+      }
+    }, 30000);
   }
 
   await splashPromise;

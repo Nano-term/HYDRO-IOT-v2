@@ -41,6 +41,9 @@ export const UIConfig = {
 
   _cargarValores() {
     const cfg = JSON.parse(localStorage.getItem('hidro_config') || '{}');
+    if (cfg.tanque_altura_cm  && $id('cfgTanqueAltura'))  $id('cfgTanqueAltura').value  = cfg.tanque_altura_cm;
+    if (cfg.tanque_offset_cm  && $id('cfgTanqueOffset'))  $id('cfgTanqueOffset').value  = cfg.tanque_offset_cm;
+    if (cfg.tanque_volumen_l  && $id('cfgTanqueVolumen')) $id('cfgTanqueVolumen').value  = cfg.tanque_volumen_l;
     const u   = cfg.umbrales || CONFIG.UMBRALES;
 
     const setVal = (id, val) => { const el = $id(id); if (el) el.value = val; };
@@ -102,10 +105,17 @@ export const UIConfig = {
   },
 
   guardar() {
-    const nivelMin = parseInt($id('cfgNivelMin')?.value  || '25');
-    const nivelMax = parseInt($id('cfgNivelMax')?.value  || '90');
-    const tempAlta = parseInt($id('cfgTempAlta')?.value  || '35');
-    const deviceId = $id('cfgDeviceId')?.value?.trim()   || CONFIG.DEVICE_ID;
+    const nivelMin   = parseInt($id('cfgNivelMin')?.value   || '25');
+    const nivelMax   = parseInt($id('cfgNivelMax')?.value   || '90');
+    const tempAlta   = parseInt($id('cfgTempAlta')?.value   || '35');
+    const deviceId   = $id('cfgDeviceId')?.value?.trim()    || CONFIG.DEVICE_ID;
+    // Calibración del tanque — se guarda en Firebase para que el ESP32 la use
+    const alturaStr  = $id('cfgTanqueAltura')?.value?.trim();
+    const offsetStr  = $id('cfgTanqueOffset')?.value?.trim();
+    const volumenStr = $id('cfgTanqueVolumen')?.value?.trim();
+    const tanqueAltura  = alturaStr  ? parseFloat(alturaStr)  : null;
+    const tanqueOffset  = offsetStr  ? parseFloat(offsetStr)  : null;
+    const tanqueVolumen = volumenStr ? parseFloat(volumenStr) : null;
 
     const cfg = {
       deviceId,
@@ -114,9 +124,25 @@ export const UIConfig = {
         temperatura: { ...CONFIG.UMBRALES.temperatura, alta:   tempAlta },
       }
     };
+    if (tanqueAltura  !== null) cfg.tanque_altura_cm  = tanqueAltura;
+    if (tanqueOffset  !== null) cfg.tanque_offset_cm  = tanqueOffset;
+    if (tanqueVolumen !== null) cfg.tanque_volumen_l   = tanqueVolumen;
+
     localStorage.setItem('hidro_config', JSON.stringify(cfg));
     State.setUmbrales(cfg.umbrales);
     State.setApp({ deviceId });
+
+    // Guardar calibración en Firebase para que ESP32 la actualice
+    if ((tanqueAltura || tanqueOffset || tanqueVolumen) && !State.isSimMode()) {
+      import('../firebase/firebase.js').then(({ fbSetConfiguracion }) => {
+        fbSetConfiguracion(deviceId, {
+          tanque_altura_cm:  tanqueAltura  || 0,
+          tanque_offset_cm:  tanqueOffset  || 0,
+          tanque_volumen_l:  tanqueVolumen || 0,
+        });
+      }).catch(() => {});
+    }
+
     Toast.success('Configuración guardada');
   },
 

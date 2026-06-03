@@ -56,6 +56,7 @@ function _saveSimModules(mods) {
 const State = {
 
   // ── Datos del dispositivo ──────────────────────────────────
+  _lastDataTs: null,
   device: {
     deviceId:        _deviceId,
     nombre:          'Tanque Principal',
@@ -83,9 +84,6 @@ const State = {
     wifiConectado:   false,
     firebaseConectado: false,
     online:          false,
-    andGateA:        false,
-    andGateB:        false,
-    andGateY:        false,
     ultimaLectura:   null,
   },
 

@@ -71,29 +71,49 @@ export const UIControl = {
 
   _renderAndGate(d) {
     d = d || State.device;
+    const app = State.app;
+    // Usar app como fuente primaria — se actualiza antes que device tras cambio de modo
+    // Múltiples fuentes para evitar falso "sin conexión" al cambiar de modo
+    const wifiOk = d.wifiConectado || app.deviceOnline || app.firebaseReady;
+    const fbOk   = d.firebaseConectado || app.firebaseReady;
+    const bleOk  = app.bleMode && app.bleConnected;
+
     const setGate = (id, on) => {
       const el = $id(id);
       if (!el) return;
       const led = el.querySelector('.gate-led');
       if (led) led.className = `gate-led ${on ? 'on' : 'off'}`;
     };
-    setGate('gateA', d.wifiConectado);
-    setGate('gateB', d.firebaseConectado);
+    setGate('gateA', wifiOk || bleOk);
+    setGate('gateB', fbOk  || bleOk);
 
     const note = $id('gateNote');
     if (note) {
-      const ok = d.wifiConectado && d.firebaseConectado;
-      note.textContent = ok
-        ? '✅ Control remoto habilitado'
-        : '○ Sin conexión — usando modo local o BLE';
-      note.style.color = ok ? 'var(--green)' : 'var(--text3)';
+      if (bleOk) {
+        note.textContent = '⟡ Control via Bluetooth activo';
+        note.style.color = 'var(--blue, #60a5fa)';
+      } else if (wifiOk && fbOk) {
+        note.textContent = '✅ Control remoto habilitado';
+        note.style.color = 'var(--green)';
+      } else if (wifiOk && !fbOk) {
+        note.textContent = '⏳ WiFi conectado — Firebase sincronizando...';
+        note.style.color = 'var(--amber)';
+      } else {
+        note.textContent = '○ Sin conexión — conecta WiFi o Bluetooth';
+        note.style.color = 'var(--text3)';
+      }
     }
   },
 
   async setBomba(encender) {
-    if (State.device.modo === 'AUTOMATICO' && !State.isSimMode()) {
-      Toast.warning('Cambia a modo manual para controlar la bomba');
-      return;
+    // En modo auto por Firebase: cambiar a manual automáticamente antes de enviar
+    if (State.device.modo === 'AUTOMATICO' && !State.isSimMode() && !State.isBleMode()) {
+      const modoResult = await DeviceManager.setModo(false);
+      if (!modoResult.ok) {
+        Toast.warning('No se pudo cambiar a modo manual');
+        return;
+      }
+      await new Promise(r => setTimeout(r, 300)); // dar tiempo al ESP32
     }
     const result = await DeviceManager.setBomba(encender);
     if (result.ok) {

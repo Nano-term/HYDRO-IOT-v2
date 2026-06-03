@@ -71,6 +71,7 @@ starters/
   jsonestrter
   jsonestrter.json
 index.html
+malo.jpeg
 manifest.json
 package.json
 README.md
@@ -848,6 +849,74 @@ body {
   75%      { transform: translateX(6px); }
 }
 .shake { animation: shake 0.4s ease; }
+
+/* ─── SENSOR SIM DOT ────────────────────────────────────────── */
+.metric-label-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 4px;
+}
+.sim-dot-sensor {
+  font-size: 0.72rem; color: var(--amber);
+  background: rgba(245,158,11,0.15);
+  padding: 1px 5px; border-radius: 4px;
+  font-weight: 600;
+}
+
+/* ─── RESUMEN DÍA ────────────────────────────────────────────── */
+.resumen-dia-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px; margin-top: 16px;
+}
+.resumen-dia-title {
+  font-size: 0.78rem; font-weight: 600; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  margin-bottom: 10px;
+}
+.resumen-dia-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+}
+.resumen-item { display: flex; flex-direction: column; align-items: center; }
+.resumen-val  { font-size: 1.3rem; font-weight: 700; color: var(--text); }
+.resumen-lbl  { font-size: 0.72rem; color: var(--text3); margin-top: 2px; }
+
+@media (max-width: 480px) {
+  .resumen-dia-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ─── TIMELINE ───────────────────────────────────────────────── */
+.timeline-list { display: flex; flex-direction: column; gap: 6px; }
+.timeline-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px;
+  background: var(--bg3); border-radius: 8px;
+  font-size: 0.82rem;
+}
+.timeline-icon { font-size: 0.9rem; flex-shrink: 0; }
+.timeline-texto { flex: 1; color: var(--text2); }
+.timeline-hora  { color: var(--text3); font-size: 0.75rem; flex-shrink: 0; }
+
+/* ─── SALUD DEL SISTEMA ─────────────────────────────────────── */
+.salud-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 10px; margin-top: 8px;
+}
+.salud-item {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.salud-lbl { font-size: 0.75rem; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; }
+.salud-val { font-size: 1rem; font-weight: 600; color: var(--text); }
+.salud-val.warn { color: var(--amber); }
+
+/* ─── ÚLTIMO DATO HACE X MIN ─────────────────────────────────── */
+.cache-age-badge {
+  font-size: 0.75rem; color: var(--amber);
+  background: rgba(245,158,11,0.1);
+  padding: 2px 8px; border-radius: 6px; margin-left: 6px;
+}
 ````
 
 ## File: src/js/bluetooth/ble.manager.js
@@ -1009,6 +1078,7 @@ export const BLEManager = {
 
   /** Desconectar manualmente */
   desconectar() {
+    _reconectManual = true;  // no auto-reconectar en desconexión manual
     if (_device && _device.gatt.connected) {
       _device.gatt.disconnect();
     }
@@ -1028,9 +1098,39 @@ export const BLEManager = {
   },
 
   _onDesconectado() {
+    // Solo mostrar toast si era conexión activa (no si el usuario desconectó)
+    if (_intentandoConectar) return; // ya hay reintento en marcha
     Toast.warning(`${_device?.name || 'ESP32'} desconectado`);
-    this._limpiar();
     if (_onStatus) _onStatus('DESCONECTADO');
+
+    // Intentar reconexión automática si el dispositivo sigue disponible
+    if (_device && !_reconectManual) {
+      _intentandoConectar = true;
+      console.log('[BLE] Intentando reconexión automática...');
+      setTimeout(async () => {
+        try {
+          _server  = await _device.gatt.connect();
+          _service = await _server.getPrimaryService(SERVICE_UUID);
+          _chars.cmdBomba = await _service.getCharacteristic(CHAR_CMD_BOMBA);
+          _chars.cmdModo  = await _service.getCharacteristic(CHAR_CMD_MODO);
+          try {
+            _chars.sensors = await _service.getCharacteristic(CHAR_SENSORS);
+            await _chars.sensors.startNotifications();
+            _chars.sensors.addEventListener('characteristicvaluechanged',
+              (e) => this._onSensorData(e.target.value));
+          } catch(e) {}
+          _intentandoConectar = false;
+          Toast.success('BLE reconectado');
+          if (_onStatus) _onStatus('CONECTADO');
+        } catch(e) {
+          _intentandoConectar = false;
+          this._limpiar();
+          console.warn('[BLE] Reconexión fallida:', e.message);
+        }
+      }, 2000);
+    } else {
+      this._limpiar();
+    }
   },
 
   _limpiar() {
@@ -1038,6 +1138,7 @@ export const BLEManager = {
     _server   = null;
     _service  = null;
     _chars    = {};
+    _reconectManual = false;
   },
 
   getNombre() {
@@ -1146,11 +1247,12 @@ export const DeviceManager = {
 
     if (_lastSeenOnline > 0 && sinDatos > OFFLINE_THRESHOLD) {
       if (!State.isSimMode() && !State.isBleMode()) {
-        console.warn('[DeviceManager] Sin datos >30s → activando simulación');
-        State.setApp({ deviceOnline: false, simModeActive: true, dataSource: 'sim' });
+        console.warn('[DeviceManager] Sin datos >30s → mostrando caché');
+        // NO activar simulación automática — mostrar últimos datos reales
+        State.setApp({ deviceOnline: false, dataSource: 'cache' });
         State.setDevice({ online: false, estado: 'OFFLINE' });
-        simSyncFromDevice(); // continuar desde últimos valores conocidos
-        simStart();
+        // Cargar caché si aún no está cargado
+        if (!State.lastKnownData) State.cargarDesdeCache();
       }
     }
   },
@@ -1268,18 +1370,20 @@ export const DeviceManager = {
     }
 
     if (State.isBleMode()) {
+      if (!BLEManager.isConnected()) {
+        return { ok: false, error: 'BLE no conectado — acerca el teléfono al ESP32' };
+      }
       try {
         await BLEManager.enviarBomba(encender);
         State.setDevice({ bomba: encender });
         return { ok: true, fuente: 'ble' };
       } catch(e) {
-        return { ok: false, error: e.message };
+        // Evitar spam de errores GATT
+        console.warn('[DeviceManager] BLE enviarBomba error:', e.message);
+        return { ok: false, error: 'Error BLE — reconectando...' };
       }
     }
 
-    if (!State.device.andGateY) {
-      return { ok: false, error: 'AND gate OFF — WiFi o Firebase no disponibles' };
-    }
     const ok = await fbSetBomba(deviceId, encender);
     if (ok) State.setDevice({ bomba: encender });
     return { ok, fuente: 'firebase' };
@@ -1295,12 +1399,16 @@ export const DeviceManager = {
     }
 
     if (State.isBleMode()) {
+      if (!BLEManager.isConnected()) {
+        return { ok: false, error: 'BLE no conectado' };
+      }
       try {
         await BLEManager.enviarModo(modoAuto);
         State.setDevice({ modo: modoAuto ? 'AUTOMATICO' : 'MANUAL' });
         return { ok: true, fuente: 'ble' };
       } catch(e) {
-        return { ok: false, error: e.message };
+        console.warn('[DeviceManager] BLE enviarModo error:', e.message);
+        return { ok: false, error: 'Error BLE — reconectando...' };
       }
     }
 
@@ -1368,11 +1476,9 @@ export function listenLecturas(deviceId) {
 
     // ── Sin datos: ESP32 no ha publicado aún ─────────────
     if (!snap.exists()) {
-      console.warn('[Firebase] Ruta vacía → simulación activa');
-      State.setApp({ deviceOnline: false, firebaseReady: true, simModeActive: true });
-      import('../simulators/sim.main.js')
-        .then(m => { if (!m.simIsRunning()) m.simStart(); })
-        .catch(() => {});
+      console.warn('[Firebase] Ruta vacía — sin datos del ESP32 aún');
+      State.setApp({ deviceOnline: false, firebaseReady: true });
+      // No iniciar simulación — mostrar caché si existe
       return;
     }
 
@@ -1411,12 +1517,24 @@ export function listenLecturas(deviceId) {
       wifiConectado:     d.wifiConectado     ?? false,
       firebaseConectado: true,
       online:            true,
-      andGateA: d.andGateA ?? false,
-      andGateB: d.andGateB ?? false,
-      andGateY: d.andGateY ?? false,
+      // Estadísticas de bomba
+      bomba_ciclos_hoy:    d.bomba_ciclos_hoy    ?? undefined,
+      bomba_minutos_hoy:   d.bomba_minutos_hoy   ?? undefined,
+      bomba_duracion_ult:  d.bomba_duracion_ult  ?? undefined,
+      litros_actuales:     parseFloat(d.litros_actuales    ?? 0),
+      consumo_litros_hoy:  parseFloat(d.consumo_litros_hoy ?? 0),
+      consumo_litros_prom: parseFloat(d.consumo_litros_prom?? 0),
+      fuga_detectada:      d.fuga_detectada ?? false,
+      llenado_tiempo_prom: d.llenado_tiempo_prom ?? 0,
     });
 
-    State.setApp({ deviceOnline: true, firebaseReady: true, simModeActive: false });
+    State.setApp({
+      deviceOnline:     true,
+      firebaseReady:    true,
+      simModeActive:    false,
+      dataSource:       'firebase',
+      bleMode:          false,     // salir de modo BLE si llegaron datos Firebase
+    });
 
     State.addHistorial({
       nivel:       parseFloat(d.nivel       ?? 0),
@@ -1533,6 +1651,48 @@ export async function fbGetConfiguracion(deviceId) {
   } catch (e) {
     return null;
   }
+}
+
+// ── Escuchar config en tiempo real (sin recarga) ──────────────
+export function listenConfiguracion(deviceId, onChange) {
+  if (!_db) return;
+  const r = ref(_db, CONFIG.RTDB_PATHS.configuracion(deviceId));
+  if (_listeners.config) _listeners.config();
+  _listeners.config = onValue(r, snap => {
+    if (snap.exists()) onChange(snap.val());
+  });
+}
+
+// ── Reconexión automática con backoff ─────────────────────────
+let _reconectTimer   = null;
+let _reconectDelay   = 5000;
+let _reconectCb      = null;
+
+export function firebase_onDesconexion(cb) {
+  _reconectCb = cb;
+}
+
+export function firebase_scheduleReconnect() {
+  if (_reconectTimer) clearTimeout(_reconectTimer);
+  _reconectTimer = setTimeout(() => {
+    console.log('[Firebase] Reintentando reconexión...');
+    if (_reconectCb) _reconectCb();
+    _reconectDelay = Math.min(_reconectDelay * 2, 60000);
+  }, _reconectDelay);
+}
+
+export function firebase_resetReconnect() {
+  _reconectDelay = 5000;
+  if (_reconectTimer) { clearTimeout(_reconectTimer); _reconectTimer = null; }
+}
+
+export async function fbSetConfiguracion(deviceId, data) {
+  if (!_db) return false;
+  try {
+    const r = ref(_db, CONFIG.RTDB_PATHS.configuracion(deviceId));
+    await set(r, { ...data });
+    return true;
+  } catch(e) { return false; }
 }
 
 export function cancelarListeners() {
@@ -2208,6 +2368,9 @@ export const UIConfig = {
 
   _cargarValores() {
     const cfg = JSON.parse(localStorage.getItem('hidro_config') || '{}');
+    if (cfg.tanque_altura_cm  && $id('cfgTanqueAltura'))  $id('cfgTanqueAltura').value  = cfg.tanque_altura_cm;
+    if (cfg.tanque_offset_cm  && $id('cfgTanqueOffset'))  $id('cfgTanqueOffset').value  = cfg.tanque_offset_cm;
+    if (cfg.tanque_volumen_l  && $id('cfgTanqueVolumen')) $id('cfgTanqueVolumen').value  = cfg.tanque_volumen_l;
     const u   = cfg.umbrales || CONFIG.UMBRALES;
 
     const setVal = (id, val) => { const el = $id(id); if (el) el.value = val; };
@@ -2269,10 +2432,17 @@ export const UIConfig = {
   },
 
   guardar() {
-    const nivelMin = parseInt($id('cfgNivelMin')?.value  || '25');
-    const nivelMax = parseInt($id('cfgNivelMax')?.value  || '90');
-    const tempAlta = parseInt($id('cfgTempAlta')?.value  || '35');
-    const deviceId = $id('cfgDeviceId')?.value?.trim()   || CONFIG.DEVICE_ID;
+    const nivelMin   = parseInt($id('cfgNivelMin')?.value   || '25');
+    const nivelMax   = parseInt($id('cfgNivelMax')?.value   || '90');
+    const tempAlta   = parseInt($id('cfgTempAlta')?.value   || '35');
+    const deviceId   = $id('cfgDeviceId')?.value?.trim()    || CONFIG.DEVICE_ID;
+    // Calibración del tanque — se guarda en Firebase para que el ESP32 la use
+    const alturaStr  = $id('cfgTanqueAltura')?.value?.trim();
+    const offsetStr  = $id('cfgTanqueOffset')?.value?.trim();
+    const volumenStr = $id('cfgTanqueVolumen')?.value?.trim();
+    const tanqueAltura  = alturaStr  ? parseFloat(alturaStr)  : null;
+    const tanqueOffset  = offsetStr  ? parseFloat(offsetStr)  : null;
+    const tanqueVolumen = volumenStr ? parseFloat(volumenStr) : null;
 
     const cfg = {
       deviceId,
@@ -2281,9 +2451,25 @@ export const UIConfig = {
         temperatura: { ...CONFIG.UMBRALES.temperatura, alta:   tempAlta },
       }
     };
+    if (tanqueAltura  !== null) cfg.tanque_altura_cm  = tanqueAltura;
+    if (tanqueOffset  !== null) cfg.tanque_offset_cm  = tanqueOffset;
+    if (tanqueVolumen !== null) cfg.tanque_volumen_l   = tanqueVolumen;
+
     localStorage.setItem('hidro_config', JSON.stringify(cfg));
     State.setUmbrales(cfg.umbrales);
     State.setApp({ deviceId });
+
+    // Guardar calibración en Firebase para que ESP32 la actualice
+    if ((tanqueAltura || tanqueOffset || tanqueVolumen) && !State.isSimMode()) {
+      import('../firebase/firebase.js').then(({ fbSetConfiguracion }) => {
+        fbSetConfiguracion(deviceId, {
+          tanque_altura_cm:  tanqueAltura  || 0,
+          tanque_offset_cm:  tanqueOffset  || 0,
+          tanque_volumen_l:  tanqueVolumen || 0,
+        });
+      }).catch(() => {});
+    }
+
     Toast.success('Configuración guardada');
   },
 
@@ -2420,7 +2606,7 @@ export const UIControl = {
     if (desc) {
       desc.textContent = isAuto
         ? 'La bomba se activa cuando el nivel baja del 25% y se apaga al superar el 90%.'
-        : 'La bomba responde a los comandos manuales. AND gate debe estar activo para comandos remotos.';
+        : 'La bomba responde a los comandos manuales.';
     }
 
     // Botones bomba
@@ -2448,29 +2634,48 @@ export const UIControl = {
 
   _renderAndGate(d) {
     d = d || State.device;
+    const app = State.app;
+    // Usar app como fuente primaria — se actualiza antes que device tras cambio de modo
+    const wifiOk = d.wifiConectado || app.deviceOnline;
+    const fbOk   = d.firebaseConectado || (app.firebaseReady && app.dataSource === 'firebase');
+    const bleOk  = app.bleMode && app.bleConnected;
+
     const setGate = (id, on) => {
       const el = $id(id);
       if (!el) return;
       const led = el.querySelector('.gate-led');
       if (led) led.className = `gate-led ${on ? 'on' : 'off'}`;
     };
-    setGate('gateA', d.andGateA);
-    setGate('gateB', d.andGateB);
-    setGate('gateY', d.andGateY);
+    setGate('gateA', wifiOk || bleOk);
+    setGate('gateB', fbOk  || bleOk);
 
     const note = $id('gateNote');
     if (note) {
-      note.textContent = d.andGateY
-        ? '✅ Control remoto habilitado (WiFi AND Firebase activos)'
-        : '⛔ Control remoto bloqueado — conectar WiFi y Firebase';
-      note.style.color = d.andGateY ? 'var(--green)' : 'var(--amber)';
+      if (bleOk) {
+        note.textContent = '⟡ Control via Bluetooth activo';
+        note.style.color = 'var(--blue, #60a5fa)';
+      } else if (wifiOk && fbOk) {
+        note.textContent = '✅ Control remoto habilitado';
+        note.style.color = 'var(--green)';
+      } else if (wifiOk && !fbOk) {
+        note.textContent = '⏳ WiFi conectado — Firebase sincronizando...';
+        note.style.color = 'var(--amber)';
+      } else {
+        note.textContent = '○ Sin conexión — conecta WiFi o Bluetooth';
+        note.style.color = 'var(--text3)';
+      }
     }
   },
 
   async setBomba(encender) {
-    if (State.device.modo === 'AUTOMATICO' && !State.isSimMode()) {
-      Toast.warning('Cambia a modo manual para controlar la bomba');
-      return;
+    // En modo auto por Firebase: cambiar a manual automáticamente antes de enviar
+    if (State.device.modo === 'AUTOMATICO' && !State.isSimMode() && !State.isBleMode()) {
+      const modoResult = await DeviceManager.setModo(false);
+      if (!modoResult.ok) {
+        Toast.warning('No se pudo cambiar a modo manual');
+        return;
+      }
+      await new Promise(r => setTimeout(r, 300)); // dar tiempo al ESP32
     }
     const result = await DeviceManager.setBomba(encender);
     if (result.ok) {
@@ -2497,17 +2702,20 @@ window.UIControl = UIControl;
 ## File: src/js/ui/ui.dashboard.js
 ````javascript
 /**
- * ui.dashboard.js v2.0
- * Muestra fuente de datos, último timestamp y datos en caché
+ * ui.dashboard.js v3.0
+ * - SIM tag por sensor individual (no global)
+ * - Tarjeta resumen del día
+ * - Métricas secundarias rediseñadas con barra de estado
+ * - Offline/BLE/caché totalmente funcional
  */
 import State from '../state.js';
+import CONFIG from '../config/app.config.js';
 
 function fmt(val, dec = 1) {
   const n = parseFloat(val);
   return isNaN(n) ? '--' : n.toFixed(dec);
 }
 function $id(id) { return document.getElementById(id); }
-
 function setColorClass(el, estado) {
   el.classList.remove('precauc', 'alerta', 'critico');
   if (estado === 'PRECAUCION') el.classList.add('precauc');
@@ -2515,7 +2723,19 @@ function setColorClass(el, estado) {
   else if (estado === 'CRITICO')  el.classList.add('critico');
 }
 
-// Actualiza el badge de "hace X minutos"
+// ── Calcula color de barra según valor vs umbral ──────────────
+function _barColor(val, warn, crit, inverted = false) {
+  if (inverted) {
+    if (val >= crit) return 'var(--red)';
+    if (val >= warn) return 'var(--amber)';
+    return 'var(--green)';
+  }
+  if (val <= crit) return 'var(--red)';
+  if (val <= warn) return 'var(--amber)';
+  return 'var(--green)';
+}
+
+// ── Timer "hace X minutos" ────────────────────────────────────
 let _ageTimer = null;
 
 export const UIDashboard = {
@@ -2524,8 +2744,6 @@ export const UIDashboard = {
     State.on('device:update', (d) => this.render(d));
     State.on('estado:change', (e) => this._renderEstado(e));
     State.on('app:update',    (a) => this._renderOnline(a));
-
-    // Timer para actualizar "hace X minutos" cada 30s
     _ageTimer = setInterval(() => this._renderAge(), 30000);
   },
 
@@ -2533,13 +2751,15 @@ export const UIDashboard = {
     const nivel = parseFloat(d.nivel ?? 0);
     const set   = (id, val) => { const el = $id(id); if (el) el.textContent = val; };
 
+    // ── Métricas principales ──────────────────────────────────
     set('mNivel',    fmt(nivel, 0));
     set('mTemp',     fmt(d.temperatura));
     set('mHum',      fmt(d.humedad, 0));
-    set('mTurbidez', fmt(d.turbidez));
-    set('mFlujo',    fmt(d.flujo));
-    set('mPH',       fmt(d.ph, 2));
-    set('mTDS',      fmt(d.tds, 0));
+
+    // Litros si disponible
+    const litros = parseFloat(d.litros_actuales ?? 0);
+    const litrosEl = $id('mLitros');
+    if (litrosEl) litrosEl.textContent = litros > 0 ? fmt(litros, 0) : '--';
 
     const bombaOn = d.bomba === true;
     set('mBomba', bombaOn ? 'ON' : 'OFF');
@@ -2547,18 +2767,97 @@ export const UIDashboard = {
     if (bWrap) { bWrap.classList.toggle('green', bombaOn); bWrap.classList.toggle('red', !bombaOn); }
 
     const bar = $id('mNivelBar');
-    if (bar) bar.style.width = `${Math.min(100, nivel)}%`;
+    if (bar) {
+      bar.style.width = `${Math.min(100, nivel)}%`;
+      const u = State.umbrales;
+      bar.style.background = _barColor(nivel, u.nivel.minimo, u.nivel.criticoBajo);
+    }
 
     const fill = $id('tanqueMiniRell');
     if (fill) fill.style.height = `${Math.min(100, nivel)}%`;
     const lbl = $id('tanqueMiniLabel');
     if (lbl) lbl.textContent = `${fmt(nivel, 0)}%`;
 
-    const simTag = $id('simTagCalidad');
-    if (simTag) simTag.classList.toggle('hidden', !d.turbidezSim);
+    // ── Métricas secundarias con indicador SIM individual ─────
+    this._renderMetricaCalidad('mTurbidez', 'mTurbidezBar', 'simDot_turbidez',
+      d.turbidez, d.turbidezSim, '%', 15, 30, true);
+    this._renderMetricaCalidad('mFlujo', 'mFlujoBar', 'simDot_flujo',
+      d.flujo, d.flujoSim, 'L/m', 2, 0.5, false, true);
+    this._renderMetricaCalidad('mPH', 'mPHBar', 'simDot_ph',
+      d.ph, d.phSim, '', 6.0, 8.5, false, false, true);
+    this._renderMetricaCalidad('mTDS', 'mTDSBar', 'simDot_tds',
+      d.tds, d.tdsSim, 'ppm', 350, 500, true);
+
+    // ── Tarjeta resumen del día ───────────────────────────────
+    this._renderResumenDia(d);
 
     this._renderEstado(d.estado);
     this._renderAge();
+  },
+
+  _renderMetricaCalidad(valId, barId, simId, valor, esSim, unidad, warn, crit, mayorEsPeor = true, esFlujo = false, esPH = false) {
+    const el  = $id(valId);
+    const bar = $id(barId);
+    const dot = $id(simId);
+
+    const v = parseFloat(valor ?? 0);
+
+    if (el) el.textContent = isNaN(v) ? '--' : v.toFixed(esPH ? 2 : 1);
+
+    // Mostrar indicador SIM solo para ESTE sensor si está simulado
+    if (dot) {
+      const mostrarSim = esSim === true || State.isSensorSim(simId.replace('simDot_',''));
+      dot.classList.toggle('hidden', !mostrarSim);
+    }
+
+    if (!bar) return;
+
+    // Barra proporcional según rango del sensor
+    let pct = 0;
+    let color = 'var(--green)';
+
+    if (esPH) {
+      // pH: rango 0-14, ideal 6-8.5
+      pct = Math.min(100, (v / 14) * 100);
+      color = (v < 5.5 || v > 9) ? 'var(--red)' : (v < 6 || v > 8.5) ? 'var(--amber)' : 'var(--green)';
+    } else if (esFlujo) {
+      // Flujo: malo si muy bajo (esperado > 2 L/min con bomba ON)
+      pct = Math.min(100, (v / 30) * 100);
+      color = v < 0.5 ? 'var(--text3)' : v < warn ? 'var(--amber)' : 'var(--green)';
+    } else if (mayorEsPeor) {
+      // Turbidez, TDS: mayor = peor
+      const max = crit * 2;
+      pct = Math.min(100, (v / max) * 100);
+      color = v >= crit ? 'var(--red)' : v >= warn ? 'var(--amber)' : 'var(--green)';
+    }
+
+    bar.style.width  = `${pct}%`;
+    bar.style.background = color;
+  },
+
+  _renderResumenDia(d) {
+    const card = $id('resumenDiaCard');
+    if (!card) return;
+
+    const ciclos  = d.bomba_ciclos_hoy   ?? '--';
+    const minutos = d.bomba_minutos_hoy  ?? '--';
+    const litros  = d.consumo_litros_hoy > 0 ? fmt(d.consumo_litros_hoy, 0) + ' L' : '--';
+    const fuga    = d.fuga_detectada === true;
+
+    const setR = (id, val) => { const e = $id(id); if (e) e.textContent = val; };
+    setR('rCiclos',  ciclos);
+    setR('rMinutos', minutos + (minutos !== '--' ? ' min' : ''));
+    setR('rLitros',  litros);
+
+    const fugaEl = $id('rFuga');
+    if (fugaEl) {
+      fugaEl.textContent = fuga ? '⚠ Posible fuga' : 'Sin anomalías';
+      fugaEl.style.color = fuga ? 'var(--red)' : 'var(--green)';
+    }
+
+    // Mostrar la card solo si hay datos
+    const tieneDatos = d.bomba_ciclos_hoy !== undefined;
+    card.classList.toggle('hidden', !tieneDatos && !State.isSimMode());
   },
 
   _renderAge() {
@@ -2573,10 +2872,8 @@ export const UIDashboard = {
       return;
     }
 
-    const ahora = new Date();
-    el.textContent = ahora.toLocaleTimeString('es-MX');
+    el.textContent = new Date().toLocaleTimeString('es-MX');
 
-    // Badge de antigüedad
     if (badge) {
       if (!State.app.deviceOnline && age > 60) {
         const min = Math.floor(age / 60);
@@ -2597,21 +2894,17 @@ export const UIDashboard = {
       'MANTENIMIENTO': { label: 'MANT.',      sub: 'Modo mantenimiento',             dotClass: 'offline', cardClass: 'estado-precauc' },
       'OFFLINE':       { label: 'OFFLINE',    sub: 'Sin conexión',                   dotClass: 'offline', cardClass: '' },
     };
-
     const info = MAP[estado] || MAP['OFFLINE'];
-
-    const label = $id('estadoLabel');
-    const sub   = $id('estadoSub');
-    const card  = $id('estadoCard');
-    const dot   = $id('navDot');
+    const label  = $id('estadoLabel');
+    const sub    = $id('estadoSub');
+    const card   = $id('estadoCard');
+    const dot    = $id('navDot');
     const navEst = $id('navEstado');
-
-    if (label) { label.textContent = info.label; setColorClass(label, estado); }
-    if (sub)   sub.textContent   = info.sub;
-    if (card)  { card.classList.remove('estado-precauc','estado-alerta','estado-critico'); if (info.cardClass) card.classList.add(info.cardClass); }
-    if (dot)   dot.className     = 'status-dot ' + info.dotClass;
+    if (label)  { label.textContent = info.label; setColorClass(label, estado); }
+    if (sub)    sub.textContent   = info.sub;
+    if (card)   { card.classList.remove('estado-precauc','estado-alerta','estado-critico'); if (info.cardClass) card.classList.add(info.cardClass); }
+    if (dot)    dot.className     = 'status-dot ' + info.dotClass;
     if (navEst) navEst.textContent = info.label;
-
     const mapSem = { 'NORMAL':'verde', 'PRECAUCION':'ambar', 'ALERTA':'rojo', 'CRITICO':'rojo', 'OFFLINE':'' };
     ['verde','ambar','rojo'].forEach(c => {
       const el = $id(`sem${c.charAt(0).toUpperCase()+c.slice(1)}`);
@@ -2620,28 +2913,23 @@ export const UIDashboard = {
   },
 
   _renderOnline(app) {
-    const badge     = $id('onlineBadge');
-    const simBadge  = $id('simBadge');
-    const bleBadge  = $id('bleBadge');
+    const badge      = $id('onlineBadge');
+    const simBadge   = $id('simBadge');
+    const bleBadge   = $id('bleBadge');
     const cacheBadge = $id('cacheBadge');
-    const banner    = $id('offlineBanner');
-
+    const banner     = $id('offlineBanner');
     if (!badge) return;
-
-    // Badge principal de fuente de datos
     const sourceMap = {
-      firebase: { text: '● En línea',    cls: 'online-badge' },
-      ble:      { text: '⟡ BLE',         cls: 'online-badge ble-online-badge' },
-      sim:      { text: '◈ Simulación',  cls: 'online-badge sim-online-badge' },
+      firebase: { text: '● En línea',     cls: 'online-badge' },
+      ble:      { text: '⟡ BLE',          cls: 'online-badge ble-online-badge' },
+      sim:      { text: '◈ Simulación',   cls: 'online-badge sim-online-badge' },
       cache:    { text: '⊙ Sin conexión', cls: 'online-badge offline-badge' },
-      none:     { text: '○ Sin datos',   cls: 'online-badge offline-badge' },
+      none:     { text: '○ Sin datos',    cls: 'online-badge offline-badge' },
     };
-
-    const src = app.dataSource || 'none';
+    const src  = app.dataSource || 'none';
     const info = sourceMap[src] || sourceMap.none;
     badge.textContent = info.text;
     badge.className   = info.cls;
-
     if (simBadge)   simBadge.classList.toggle('hidden',  src !== 'sim');
     if (bleBadge)   bleBadge.classList.toggle('hidden',  src !== 'ble');
     if (cacheBadge) cacheBadge.classList.toggle('hidden', src !== 'cache');
@@ -2725,6 +3013,58 @@ export const UIAlertas = {
   },
 };
 window.UIAlertas = UIAlertas;
+
+
+// ══════════════════════════════════════════════════════════════
+// UITimeline — Historial de eventos recientes
+// ══════════════════════════════════════════════════════════════
+export const UITimeline = {
+  _eventos: [],
+
+  init() {
+    // Escuchar cambios de bomba, estado y alertas para registrar eventos
+    State.on('bomba:change', (encendida) => {
+      this._addEvento(encendida ? 'bomba_on' : 'bomba_off',
+        encendida ? 'Bomba encendida' : 'Bomba apagada');
+    });
+    State.on('estado:change', (estado) => {
+      if (estado !== 'NORMAL' && estado !== 'OFFLINE') {
+        this._addEvento('alerta', 'Estado: ' + estado);
+      }
+    });
+    State.on('alertas:update', (alertas) => {
+      const nuevas = alertas.filter(a => !a.resuelta && a.ts && (Date.now() - a.ts) < 5000);
+      nuevas.forEach(a => this._addEvento('alerta', a.tipo.replace(/_/g,' ') + ': ' + a.mensaje));
+      this._render();
+    });
+    State.on('page:change', (p) => { if (p === 'alertas') this._render(); });
+  },
+
+  _addEvento(tipo, texto) {
+    this._eventos.unshift({ tipo, texto, ts: Date.now() });
+    if (this._eventos.length > 30) this._eventos.pop();
+    this._render();
+  },
+
+  _render() {
+    const el = document.getElementById('timelineList');
+    if (!el) return;
+    if (this._eventos.length === 0) {
+      el.innerHTML = '<p style="font-size:0.82rem;color:var(--text3);padding:12px 0">Sin eventos registrados en esta sesión</p>';
+      return;
+    }
+    const iconos = { bomba_on: '💧', bomba_off: '⏹', alerta: '⚠', info: 'ℹ' };
+    el.innerHTML = this._eventos.slice(0,15).map(e => {
+      const hora = new Date(e.ts).toLocaleTimeString('es-MX');
+      return `<div class="timeline-item">
+        <span class="timeline-icon">${iconos[e.tipo] || 'ℹ'}</span>
+        <span class="timeline-texto">${e.texto}</span>
+        <span class="timeline-hora">${hora}</span>
+      </div>`;
+    }).join('');
+  },
+};
+window.UITimeline = UITimeline;
 
 
 // ══════════════════════════════════════════════════════════════
@@ -2822,6 +3162,93 @@ export const UICharts = {
   },
 
   cambiarRango() { this._actualizar(State.historial); },
+
+  renderSalud() {
+    const el = document.getElementById('saludGrid');
+    if (!el) return;
+    const d = State.device;
+    const app = State.app;
+    const edad = State.getLastDataAge();
+    const edadStr = edad === null ? '--'
+      : edad < 60  ? `${edad}s`
+      : edad < 3600 ? `${Math.floor(edad/60)}m`
+      : `${Math.floor(edad/3600)}h`;
+
+    const src = app.dataSource || 'none';
+    const srcLabel = {firebase:'Firebase',ble:'BLE',sim:'Simulación',cache:'Caché',none:'--'}[src]||src;
+    const rssi = d.rssi || 0;
+    const rssiLabel = rssi === 0 ? '--' : rssi > -60 ? '🟢 Excelente' : rssi > -75 ? '🟡 Buena' : '🔴 Débil';
+    const uptime = d.uptime || 0;
+    const uptimeStr = uptime < 60 ? `${uptime}s`
+      : uptime < 3600 ? `${Math.floor(uptime/60)}m`
+      : `${Math.floor(uptime/3600)}h ${Math.floor((uptime%3600)/60)}m`;
+
+    el.innerHTML = `
+      <div class="salud-item"><span class="salud-lbl">Última lectura</span>
+        <span class="salud-val ${edad && edad > 120 ? 'warn' : ''}">${edadStr} atrás</span></div>
+      <div class="salud-item"><span class="salud-lbl">Fuente de datos</span>
+        <span class="salud-val">${srcLabel}</span></div>
+      <div class="salud-item"><span class="salud-lbl">WiFi RSSI</span>
+        <span class="salud-val">${rssiLabel} (${rssi} dBm)</span></div>
+      <div class="salud-item"><span class="salud-lbl">Uptime ESP32</span>
+        <span class="salud-val">${uptimeStr}</span></div>
+      <div class="salud-item"><span class="salud-lbl">IP dispositivo</span>
+        <span class="salud-val">${d.ip || '--'}</span></div>
+      <div class="salud-item"><span class="salud-lbl">Firmware</span>
+        <span class="salud-val">${d.firmwareVersion || '--'}</span></div>
+      <div class="salud-item"><span class="salud-lbl">Ciclos bomba hoy</span>
+        <span class="salud-val">${d.bomba_ciclos_hoy ?? '--'}</span></div>
+      <div class="salud-item"><span class="salud-lbl">Litros bombeados hoy</span>
+        <span class="salud-val">${d.consumo_litros_hoy > 0 ? d.consumo_litros_hoy.toFixed(0)+' L' : '--'}</span></div>
+    `;
+  },
+
+  renderLitros() {
+    const canvas = document.getElementById('chartLitros');
+    if (!canvas || typeof Chart === 'undefined') return;
+    if (!State.historial || State.historial.length === 0) return;
+
+    // Agrupar litros por hora
+    const byHour = {};
+    State.historial.forEach(p => {
+      const h = new Date(p.ts).getHours();
+      byHour[h] = (byHour[h] || 0) + (parseFloat(p.consumo_litros_hoy) || 0);
+    });
+    const labels = Object.keys(byHour).map(h => `${h}:00`);
+    const data   = Object.values(byHour);
+
+    if (canvas._chartInst) canvas._chartInst.destroy();
+    canvas._chartInst = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{ label: 'Litros por hora', data,
+          backgroundColor: 'rgba(44,156,191,0.6)', borderColor: '#2c9cbf', borderWidth: 1 }]
+      },
+      options: { responsive: true, scales: { y: { beginAtZero: true } } }
+    });
+  },
+
+  exportarCSV() {
+    if (!State.historial || State.historial.length === 0) {
+      Toast.warning('Sin datos de historial para exportar');
+      return;
+    }
+    const headers = 'Timestamp,Nivel(%),Temperatura(C),Turbidez(NTU),pH';
+    const rows = State.historial.map(p => {
+      const fecha = new Date(p.ts).toISOString();
+      return `${fecha},${(p.nivel??'').toFixed?.(1)??''},${(p.temperatura??'').toFixed?.(1)??''},${(p.turbidez??'').toFixed?.(1)??''},${(p.ph??'').toFixed?.(2)??''}`;
+    });
+    const csv  = [headers, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `hidro_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    Toast.success('CSV descargado');
+  },
 };
 window.UICharts = UICharts;
 
@@ -2895,8 +3322,73 @@ window.UINotas = UINotas;
 
 
 // ══════════════════════════════════════════════════════════════
+// UIAlertasHistorial — Alertas resueltas
+// ══════════════════════════════════════════════════════════════
+export const UIAlertasHistorial = {
+  init() {
+    State.on('alertas:update', () => this._render());
+    State.on('page:change', (p) => { if (p === 'alertas') this._render(); });
+  },
+
+  _render() {
+    const el = document.getElementById('alertasHistorial');
+    if (!el) return;
+    const resueltas = State.alertas.filter(a => a.resuelta).slice(0, 20);
+    if (resueltas.length === 0) {
+      el.innerHTML = '<p style="font-size:0.82rem;color:var(--text3)">Sin alertas resueltas aún</p>';
+      return;
+    }
+    const colorMap = { 1: '', 2: 'nivel-2', 3: 'nivel-3', 4: 'nivel-4' };
+    el.innerHTML = resueltas.map(a => `
+      <div class="alerta-item ${colorMap[a.nivel]||''}" style="opacity:0.6">
+        <div class="alerta-body">
+          <h4 style="text-decoration:line-through">${a.tipo.replace(/_/g,' ')}</h4>
+          <p>${a.mensaje||''}</p>
+          <div class="alerta-meta">
+            Resuelta &bull; ${a.ts ? new Date(a.ts).toLocaleString('es-MX') : '--'}
+          </div>
+        </div>
+      </div>`).join('');
+  },
+};
+window.UIAlertasHistorial = UIAlertasHistorial;
+
+
+// ══════════════════════════════════════════════════════════════
 // UINav — Reloj, uptime, RSSI en sidebar
 // ══════════════════════════════════════════════════════════════
+// ── Salud del sistema ─────────────────────────────────────────
+export const UISalud = {
+  init() {
+    State.on('device:update', () => {
+      if (document.getElementById('page-salud')?.classList.contains('active')) {
+        this.render();
+      }
+      this._actualizarEdad();
+    });
+    State.on('page:change', p => { if (p === 'salud') this.render(); });
+    setInterval(() => this._actualizarEdad(), 15000);
+  },
+  render() {
+    if (typeof UICharts !== 'undefined' && UICharts.renderSalud) {
+      UICharts.renderSalud();
+    }
+    // fallback inline
+    const el = document.getElementById('saludGrid');
+    if (el && el.innerHTML === '') UICharts?.renderSalud?.();
+  },
+  _actualizarEdad() {
+    const badge = document.getElementById('lastDataAge');
+    if (!badge) return;
+    const edad = State.getLastDataAge();
+    if (edad === null || edad < 90) { badge.classList.add('hidden'); return; }
+    const min = Math.floor(edad / 60);
+    badge.textContent = `Datos de hace ${min} min`;
+    badge.classList.remove('hidden');
+  },
+};
+window.UISalud = UISalud;
+
 export const UINav = {
   init() {
     State.on('device:update', (d) => this._renderInfo(d));
@@ -2949,14 +3441,16 @@ export const Toast = {
 import CONFIG        from './config/app.config.js';
 import State         from './state.js';
 import { Router }    from './router.js';
-import { firebaseInit, listenLecturas, listenAlertas, listenNotas }
+import { firebaseInit, listenLecturas, listenAlertas, listenNotas,
+         listenConfiguracion, firebase_onDesconexion,
+         firebase_scheduleReconnect, firebase_resetReconnect }
                      from './firebase/firebase.js';
 import DeviceManager from './device/device.manager.js';
 import { simStart }  from './simulators/sim.main.js';
 import { EstadosModule } from './modules/estados.module.js';
 import { UIDashboard }   from './ui/ui.dashboard.js';
 import { UIControl }     from './ui/ui.control.js';
-import { UIAlertas, UICharts, UINotas, UINav } from './ui/ui.modules.js';
+import { UIAlertas, UICharts, UINotas, UINav, UITimeline, UIAlertasHistorial, UISalud } from './ui/ui.modules.js';
 import { UIConfig }  from './ui/ui.config.js';
 import UIBLE         from './ui/ui.ble.js';
 
@@ -2988,10 +3482,55 @@ function mostrarApp() {
   }, 500);
 }
 
-async function init() {
-  // Safety: show app after 4s no matter what
-  const safetyTimer = setTimeout(mostrarApp, 4000);
+// ── Notificaciones push ───────────────────────────────────────
 
+function _initNotificaciones() {
+  const btn = document.getElementById('btnActivarNotif');
+  const status = document.getElementById('notifStatus');
+  if (!('Notification' in window)) {
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = 'Estado: no soportado en este navegador';
+    return;
+  }
+  const p = Notification.permission;
+  if (status) {
+    if (p === 'granted') status.textContent = 'Estado: ✅ activadas';
+    else if (p === 'denied') status.textContent = 'Estado: ❌ bloqueadas (activar en config del navegador)';
+    else status.textContent = 'Estado: pendiente de activar';
+  }
+  if (btn) btn.textContent = p === 'granted' ? 'Activadas ✓' : 'Activar notificaciones';
+}
+
+function activarNotificaciones() {
+  if (!('Notification' in window)) return;
+  Notification.requestPermission().then(p => {
+    _initNotificaciones();
+    if (p === 'granted') {
+      import('./utils/toast.js').then(m => m.Toast.success('Notificaciones activadas'));
+    }
+  });
+}
+window.activarNotificaciones = activarNotificaciones;
+
+function _enviarNotificacion(alerta) {
+  if (Notification.permission !== 'granted') return;
+  if (document.visibilityState === 'visible') return; // app abierta, no molestar
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({
+      type:   'NOTIFY_ALERTA',
+      titulo: 'HidroGanadero — ' + alerta.tipo.replace(/_/g, ' '),
+      cuerpo: alerta.mensaje || '',
+      nivel:  alerta.nivel,
+    });
+  } else {
+    new Notification('HidroGanadero — ' + alerta.tipo.replace(/_/g,' '), {
+      body: alerta.mensaje || '',
+      icon: '/public/icons/icon-192.png',
+    });
+  }
+}
+
+async function init() {
   const splashPromise = animarSplash();
 
   // Config local
@@ -3008,11 +3547,17 @@ async function init() {
   UINotas.init();
   UIConfig.init();
   UINav.init();
+  UITimeline.init();
+  UIAlertasHistorial.init();
+  UISalud.init();
   UIBLE.init();
   EstadosModule.init();
 
   // DeviceManager init — carga caché inmediatamente si existe
   DeviceManager.init();
+
+  // Notificaciones push — pedir permiso si ya fue otorgado antes
+  _initNotificaciones();
 
   Router.init();
 
@@ -3026,6 +3571,12 @@ async function init() {
     document.getElementById('navOverlay')?.classList.add('hidden');
   });
 
+  // Escuchar alertas críticas para notificación push
+  State.on('alertas:update', (alertas) => {
+    const criticas = alertas.filter(a => !a.resuelta && a.nivel >= 3 && a.ts && (Date.now() - a.ts) < 8000);
+    criticas.forEach(a => _enviarNotificacion(a));
+  });
+
   // Firebase
   let fbOk = false;
   try { fbOk = firebaseInit(); } catch(e) {
@@ -3036,14 +3587,48 @@ async function init() {
     listenLecturas(deviceId);
     listenAlertas(deviceId);
     listenNotas(deviceId);
+
+    // Config en tiempo real — UI se actualiza sin recargar
+    listenConfiguracion(deviceId, (cfg) => {
+      State.setConfig(cfg);
+      import('./ui/ui.config.js').then(m => m.UIConfig?.renderRemote?.(cfg)).catch(()=>{});
+    });
+
+    // Reconexión automática con backoff 5s→10s→20s→...60s
+    firebase_onDesconexion(() => {
+      firebase_resetReconnect();
+      listenLecturas(deviceId);
+      listenAlertas(deviceId);
+      listenConfiguracion(deviceId, (cfg) => State.setConfig(cfg));
+    });
+    firebase_resetReconnect();
   } else {
-    console.warn('[App] Sin Firebase → simulación');
-    State.setApp({ simModeActive: true, deviceOnline: false, dataSource: 'sim' });
-    simStart();
+    console.warn('[App] Sin Firebase → modo offline');
+    // Intentar cargar últimos datos conocidos del caché
+    const cacheOk = State.cargarDesdeCache();
+    if (cacheOk) {
+      console.log('[App] Datos cargados desde caché local');
+      // BLE sigue disponible para control en tiempo real
+    } else {
+      // Sin caché ni Firebase → mostrar estado vacío, NO simular
+      // El usuario puede activar simulación manualmente desde el panel admin
+      State.setApp({ deviceOnline: false, dataSource: 'none' });
+      State.setDevice({ estado: 'OFFLINE', online: false });
+    }
+    // Intentar reconectar cada 30s si recupera internet
+    setInterval(() => {
+      if (!navigator.onLine) return;
+      let fbRetry = false;
+      try { fbRetry = firebaseInit(); } catch(e) {}
+      if (fbRetry) {
+        listenLecturas(deviceId);
+        listenAlertas(deviceId);
+        listenConfiguracion(deviceId, (cfg) => State.setConfig(cfg));
+      }
+    }, 30000);
   }
 
   await splashPromise;
-  clearTimeout(safetyTimer);
   mostrarApp();
 }
 
@@ -3170,6 +3755,7 @@ function _saveSimModules(mods) {
 const State = {
 
   // ── Datos del dispositivo ──────────────────────────────────
+  _lastDataTs: null,
   device: {
     deviceId:        _deviceId,
     nombre:          'Tanque Principal',
@@ -3197,9 +3783,6 @@ const State = {
     wifiConectado:   false,
     firebaseConectado: false,
     online:          false,
-    andGateA:        false,
-    andGateB:        false,
-    andGateY:        false,
     ultimaLectura:   null,
   },
 
@@ -3476,6 +4059,10 @@ export default State;
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
         Notas
       </a></li>
+      <li><a href="#salud" class="nav-link" data-page="salud">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Salud
+      </a></li>
       <li><a href="#config"     class="nav-link" data-page="config">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
         Configuración
@@ -3547,6 +4134,17 @@ export default State;
           <div class="metric-bar"><div class="metric-bar-fill" id="mNivelBar"></div></div>
         </div>
 
+        <div class="metric-card" data-sensor="litros">
+          <div class="metric-icon blue">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </div>
+          <div class="metric-body">
+            <div class="metric-val" id="mLitros">--</div>
+            <div class="metric-unit">L</div>
+          </div>
+          <div class="metric-label">Litros actuales</div>
+        </div>
+
         <div class="metric-card" data-sensor="temperatura">
           <div class="metric-icon orange">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 00-5 0v11.26a4.5 4.5 0 105 0z"/></svg>
@@ -3581,25 +4179,50 @@ export default State;
       </div>
 
       <!-- Sensores secundarios (simulados) -->
-      <h2 class="section-title">Sensores de Calidad del Agua
-        <span class="sim-tag" id="simTagCalidad">SIM</span>
-      </h2>
+      <h2 class="section-title">Sensores de Calidad del Agua</h2>
       <div class="metrics-grid secondary">
         <div class="metric-card small">
-          <div class="metric-label">Turbidez</div>
+          <div class="metric-label-row">
+            <span class="metric-label">Turbidez</span>
+            <span class="sim-dot-sensor hidden" id="simDot_turbidez" title="Simulado">◈</span>
+          </div>
           <div class="metric-body"><div class="metric-val" id="mTurbidez">--</div><div class="metric-unit">NTU</div></div>
+          <div class="metric-bar"><div class="metric-bar-fill" id="mTurbidezBar" style="width:0%"></div></div>
         </div>
         <div class="metric-card small">
-          <div class="metric-label">Flujo</div>
+          <div class="metric-label-row">
+            <span class="metric-label">Flujo</span>
+            <span class="sim-dot-sensor hidden" id="simDot_flujo" title="Simulado">◈</span>
+          </div>
           <div class="metric-body"><div class="metric-val" id="mFlujo">--</div><div class="metric-unit">L/min</div></div>
+          <div class="metric-bar"><div class="metric-bar-fill" id="mFlujoBar" style="width:0%"></div></div>
         </div>
         <div class="metric-card small">
-          <div class="metric-label">pH</div>
+          <div class="metric-label-row">
+            <span class="metric-label">pH</span>
+            <span class="sim-dot-sensor hidden" id="simDot_ph" title="Simulado">◈</span>
+          </div>
           <div class="metric-body"><div class="metric-val" id="mPH">--</div></div>
+          <div class="metric-bar"><div class="metric-bar-fill" id="mPHBar" style="width:0%"></div></div>
         </div>
         <div class="metric-card small">
-          <div class="metric-label">TDS</div>
+          <div class="metric-label-row">
+            <span class="metric-label">TDS</span>
+            <span class="sim-dot-sensor hidden" id="simDot_tds" title="Simulado">◈</span>
+          </div>
           <div class="metric-body"><div class="metric-val" id="mTDS">--</div><div class="metric-unit">ppm</div></div>
+          <div class="metric-bar"><div class="metric-bar-fill" id="mTDSBar" style="width:0%"></div></div>
+        </div>
+      </div>
+
+      <!-- Tarjeta resumen del día -->
+      <div class="resumen-dia-card hidden" id="resumenDiaCard">
+        <div class="resumen-dia-title">Hoy</div>
+        <div class="resumen-dia-grid">
+          <div class="resumen-item"><span class="resumen-val" id="rCiclos">--</span><span class="resumen-lbl">ciclos bomba</span></div>
+          <div class="resumen-item"><span class="resumen-val" id="rMinutos">--</span><span class="resumen-lbl">encendida</span></div>
+          <div class="resumen-item"><span class="resumen-val" id="rLitros">--</span><span class="resumen-lbl">bombeados</span></div>
+          <div class="resumen-item"><span class="resumen-val" id="rFuga" style="font-size:0.8rem">Sin anomalías</span><span class="resumen-lbl">anomalías</span></div>
         </div>
       </div>
 
@@ -3614,20 +4237,15 @@ export default State;
     <section id="page-control" class="page">
       <div class="page-header"><h1>Control Remoto</h1></div>
 
-      <!-- AND Gate status -->
+      <!-- Estado de conexión -->
       <div class="and-gate-card" id="andGateCard">
-        <div class="and-gate-title">SN74LS08N — AND Gate de Seguridad</div>
         <div class="and-gate-row">
           <div class="gate-input" id="gateA">
             <span class="gate-led"></span>WiFi
           </div>
-          <div class="gate-symbol">AND</div>
+          <div class="gate-symbol">·</div>
           <div class="gate-input" id="gateB">
             <span class="gate-led"></span>Firebase
-          </div>
-          <div class="gate-arrow">→</div>
-          <div class="gate-output" id="gateY">
-            <span class="gate-led"></span>Control habilitado
           </div>
         </div>
         <p class="gate-note" id="gateNote">Control remoto disponible</p>
@@ -3701,6 +4319,17 @@ export default State;
           <p>Sin alertas activas</p>
         </div>
       </div>
+      <!-- Timeline de eventos recientes -->
+      <div style="margin-top:24px">
+        <h2 style="font-size:1rem;color:var(--text2);margin-bottom:10px">Eventos recientes (sesión)</h2>
+        <div id="timelineList" class="timeline-list"></div>
+      </div>
+
+      <!-- Historial de alertas resueltas -->
+      <div style="margin-top:24px">
+        <h2 style="font-size:1rem;color:var(--text2);margin-bottom:10px">Alertas resueltas</h2>
+        <div id="alertasHistorial" class="alertas-list"></div>
+      </div>
     </section>
 
     <!-- ─── PÁGINA: HISTORIAL ─────────────────────────── -->
@@ -3708,6 +4337,10 @@ export default State;
       <div class="page-header">
         <h1>Historial</h1>
         <div class="header-right">
+          <button class="btn btn-sm btn-outline" onclick="UICharts.exportarCSV()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            CSV
+          </button>
           <select id="historialRange" class="select-sm" onchange="UICharts.cambiarRango(this.value)">
             <option value="30">Últimas 30 lecturas</option>
             <option value="60">Últimas 60 lecturas</option>
@@ -3732,7 +4365,17 @@ export default State;
           <h3>pH</h3>
           <canvas id="chartPH" height="120"></canvas>
         </div>
+        <div class="chart-card">
+          <h3>Litros bombeados por hora</h3>
+          <canvas id="chartLitros" height="120"></canvas>
+        </div>
       </div>
+    </section>
+
+    <!-- ─── PÁGINA: SALUD DEL SISTEMA ─────────────────── -->
+    <section id="page-salud" class="page">
+      <div class="page-header"><h1>Salud del Sistema</h1></div>
+      <div id="saludGrid" class="salud-grid"></div>
     </section>
 
     <!-- ─── PÁGINA: NOTAS ─────────────────────────────── -->
@@ -3784,6 +4427,18 @@ export default State;
             <span id="cfgTempAltaVal">35°C</span>
           </div>
         </div>
+      </div>
+
+      <!-- Notificaciones push -->
+      <div class="config-card">
+        <h2>Notificaciones</h2>
+        <div class="toggle-row">
+          <label style="font-size:0.88rem;color:var(--text2)">Alertas críticas (nivel 3-4) al instante</label>
+          <button class="btn btn-sm btn-outline" id="btnActivarNotif" onclick="activarNotificaciones()">
+            Activar notificaciones
+          </button>
+        </div>
+        <p class="config-note" id="notifStatus">Estado: no configurado. Solo funciona si instalas la app.</p>
       </div>
 
       <div class="config-card">
@@ -3963,6 +4618,29 @@ export default State;
       </div>
 
       <div class="config-footer">
+        <!-- Calibración del tanque -->
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+          <h3 style="font-size:.88rem;color:var(--text2);margin-bottom:10px">📐 Calibración del Tanque</h3>
+          <div class="config-row">
+            <label class="config-label">Altura total cm
+              <span class="config-hint">Del fondo al borde del tanque</span>
+            </label>
+            <input type="number" id="cfgTanqueAltura" class="input-sm" placeholder="ej. 120" min="10" max="500">
+          </div>
+          <div class="config-row">
+            <label class="config-label">Offset sensor cm
+              <span class="config-hint">Distancia HC-SR04 al borde superior</span>
+            </label>
+            <input type="number" id="cfgTanqueOffset" class="input-sm" placeholder="ej. 5" min="0" max="50">
+          </div>
+          <div class="config-row">
+            <label class="config-label">Volumen total litros
+              <span class="config-hint">Capacidad máxima del tanque</span>
+            </label>
+            <input type="number" id="cfgTanqueVolumen" class="input-sm" placeholder="ej. 1000" min="1">
+          </div>
+        </div>
+
         <button class="btn btn-primary" onclick="UIConfig.guardar()">Guardar configuración</button>
         <button class="btn btn-outline" onclick="UIConfig.resetear()">Restaurar valores</button>
       </div>
@@ -4264,11 +4942,11 @@ La simulación por módulo es diferente a la simulación completa:
 ## File: sw.js
 ````javascript
 /**
- * sw.js — Service Worker
- * CACHE v1.1.0 — fuerza limpieza de cache anterior
+ * sw.js — Service Worker v3.0
+ * Agrega: notificaciones push para alertas críticas
  */
 
-const CACHE_NAME = 'hidro-iot-v2.0.0';
+const CACHE_NAME = 'hidro-iot-v3.0.0';
 
 const PRECACHE = [
   '/',
@@ -4311,12 +4989,10 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = e.request.url;
-
   if (url.includes('firebase') || url.includes('googleapis') || url.includes('cdnjs') || url.includes('gstatic')) {
     e.respondWith(fetch(e.request).catch(() => new Response('', { status: 503 })));
     return;
   }
-
   e.respondWith(
     caches.match(e.request).then(cached => {
       return cached || fetch(e.request).then(resp => {
@@ -4326,5 +5002,53 @@ self.addEventListener('fetch', (e) => {
       });
     }).catch(() => caches.match('/index.html'))
   );
+});
+
+// ── Notificaciones push ───────────────────────────────────────
+self.addEventListener('push', (e) => {
+  if (!e.data) return;
+  const data = e.data.json();
+  e.waitUntil(
+    self.registration.showNotification(data.title || 'HidroGanadero', {
+      body: data.body || '',
+      icon: '/public/icons/icon-192.png',
+      badge: '/public/icons/icon-192.png',
+      tag: data.tag || 'hidro-alerta',
+      data: { url: data.url || '/#alertas' },
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(
+    clients.matchAll({ type: 'window' }).then(clientList => {
+      const url = e.notification.data?.url || '/';
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.focus();
+          client.navigate(url);
+          return;
+        }
+      }
+      if (clients.openWindow) clients.openWindow(url);
+    })
+  );
+});
+
+// ── Mensajes desde la app (para enviar notificaciones locales) ─
+self.addEventListener('message', (e) => {
+  if (e.data?.type === 'NOTIFY_ALERTA') {
+    const { titulo, cuerpo, nivel } = e.data;
+    if (nivel >= 3) {
+      self.registration.showNotification(titulo || 'HidroGanadero — Alerta', {
+        body:  cuerpo || '',
+        icon:  '/public/icons/icon-192.png',
+        badge: '/public/icons/icon-192.png',
+        tag:   'hidro-alerta',
+        requireInteraction: nivel >= 4,
+      });
+    }
+  }
 });
 ````

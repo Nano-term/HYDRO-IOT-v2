@@ -39,11 +39,12 @@ export const DeviceManager = {
 
     if (_lastSeenOnline > 0 && sinDatos > OFFLINE_THRESHOLD) {
       if (!State.isSimMode() && !State.isBleMode()) {
-        console.warn('[DeviceManager] Sin datos >30s → activando simulación');
-        State.setApp({ deviceOnline: false, simModeActive: true, dataSource: 'sim' });
+        console.warn('[DeviceManager] Sin datos >30s → mostrando caché');
+        // NO activar simulación automática — mostrar últimos datos reales
+        State.setApp({ deviceOnline: false, dataSource: 'cache' });
         State.setDevice({ online: false, estado: 'OFFLINE' });
-        simSyncFromDevice(); // continuar desde últimos valores conocidos
-        simStart();
+        // Cargar caché si aún no está cargado
+        if (!State.lastKnownData) State.cargarDesdeCache();
       }
     }
   },
@@ -107,13 +108,16 @@ export const DeviceManager = {
 
   desactivarModoBLE() {
     BLEManager.desconectar();
+    // Restaurar estado Firebase inmediatamente — no esperar al próximo dato
+    const appState = State.app;
     State.setApp({
       bleMode:      false,
       bleConnected: false,
-      deviceOnline: false,
-      dataSource:   'firebase',
+      // deviceOnline permanece true si Firebase ya estaba conectado
+      deviceOnline: appState.firebaseReady || false,
+      dataSource:   appState.firebaseReady ? 'firebase' : 'cache',
     });
-    _lastSeenOnline = 0;
+    _lastSeenOnline = Date.now(); // evitar que watchdog active caché
     console.log('[DeviceManager] BLE desconectado, volviendo a Firebase');
   },
 
@@ -161,18 +165,20 @@ export const DeviceManager = {
     }
 
     if (State.isBleMode()) {
+      if (!BLEManager.isConnected()) {
+        return { ok: false, error: 'BLE no conectado — acerca el teléfono al ESP32' };
+      }
       try {
         await BLEManager.enviarBomba(encender);
         State.setDevice({ bomba: encender });
         return { ok: true, fuente: 'ble' };
       } catch(e) {
-        return { ok: false, error: e.message };
+        // Evitar spam de errores GATT
+        console.warn('[DeviceManager] BLE enviarBomba error:', e.message);
+        return { ok: false, error: 'Error BLE — reconectando...' };
       }
     }
 
-    if (!State.device.andGateY) {
-      return { ok: false, error: 'AND gate OFF — WiFi o Firebase no disponibles' };
-    }
     const ok = await fbSetBomba(deviceId, encender);
     if (ok) State.setDevice({ bomba: encender });
     return { ok, fuente: 'firebase' };
@@ -188,12 +194,16 @@ export const DeviceManager = {
     }
 
     if (State.isBleMode()) {
+      if (!BLEManager.isConnected()) {
+        return { ok: false, error: 'BLE no conectado' };
+      }
       try {
         await BLEManager.enviarModo(modoAuto);
         State.setDevice({ modo: modoAuto ? 'AUTOMATICO' : 'MANUAL' });
         return { ok: true, fuente: 'ble' };
       } catch(e) {
-        return { ok: false, error: e.message };
+        console.warn('[DeviceManager] BLE enviarModo error:', e.message);
+        return { ok: false, error: 'Error BLE — reconectando...' };
       }
     }
 

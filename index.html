@@ -77,6 +77,10 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
         Notas
       </a></li>
+      <li><a href="#salud" class="nav-link" data-page="salud">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Salud
+      </a></li>
       <li><a href="#config"     class="nav-link" data-page="config">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
         Configuración
@@ -379,7 +383,17 @@
           <h3>pH</h3>
           <canvas id="chartPH" height="120"></canvas>
         </div>
+        <div class="chart-card">
+          <h3>Litros bombeados por hora</h3>
+          <canvas id="chartLitros" height="120"></canvas>
+        </div>
       </div>
+    </section>
+
+    <!-- ─── PÁGINA: SALUD DEL SISTEMA ─────────────────── -->
+    <section id="page-salud" class="page">
+      <div class="page-header"><h1>Salud del Sistema</h1></div>
+      <div id="saludGrid" class="salud-grid"></div>
     </section>
 
     <!-- ─── PÁGINA: NOTAS ─────────────────────────────── -->
@@ -622,6 +636,29 @@
       </div>
 
       <div class="config-footer">
+        <!-- Calibración del tanque -->
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+          <h3 style="font-size:.88rem;color:var(--text2);margin-bottom:10px">📐 Calibración del Tanque</h3>
+          <div class="config-row">
+            <label class="config-label">Altura total cm
+              <span class="config-hint">Del fondo al borde del tanque</span>
+            </label>
+            <input type="number" id="cfgTanqueAltura" class="input-sm" placeholder="ej. 120" min="10" max="500">
+          </div>
+          <div class="config-row">
+            <label class="config-label">Offset sensor cm
+              <span class="config-hint">Distancia HC-SR04 al borde superior</span>
+            </label>
+            <input type="number" id="cfgTanqueOffset" class="input-sm" placeholder="ej. 5" min="0" max="50">
+          </div>
+          <div class="config-row">
+            <label class="config-label">Volumen total litros
+              <span class="config-hint">Capacidad máxima del tanque</span>
+            </label>
+            <input type="number" id="cfgTanqueVolumen" class="input-sm" placeholder="ej. 1000" min="1">
+          </div>
+        </div>
+
         <button class="btn btn-primary" onclick="UIConfig.guardar()">Guardar configuración</button>
         <button class="btn btn-outline" onclick="UIConfig.resetear()">Restaurar valores</button>
       </div>
